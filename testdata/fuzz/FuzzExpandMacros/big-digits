@@ -1,0 +1,4 @@
+go test fuzz v1
+string("%{o99999999999999999999r}")
+string("a")
+bool(false)

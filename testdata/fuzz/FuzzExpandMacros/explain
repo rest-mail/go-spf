@@ -1,0 +1,4 @@
+go test fuzz v1
+string("See http://%{d}/why.html?s=%{S}&i=%{I} %{c} %{r} %{t}")
+string("x y")
+bool(true)

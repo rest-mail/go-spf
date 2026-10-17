@@ -1,0 +1,4 @@
+go test fuzz v1
+string("v=spf1 a -all")
+string("<@relay.example:user@example.com>")
+string("::ffff:192.0.2.1")
