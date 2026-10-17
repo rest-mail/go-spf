@@ -1,0 +1,4 @@
+go test fuzz v1
+string("%{lr-}.lp.%{ir}.%{v}._spf.%{d2}")
+string("strong-bad")
+bool(true)

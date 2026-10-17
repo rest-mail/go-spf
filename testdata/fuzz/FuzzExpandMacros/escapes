@@ -1,0 +1,4 @@
+go test fuzz v1
+string("%%%_%-.example.org")
+string("a")
+bool(true)

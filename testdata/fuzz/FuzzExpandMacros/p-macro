@@ -1,0 +1,4 @@
+go test fuzz v1
+string("%{p}.%{P}.example.org")
+string("user")
+bool(true)

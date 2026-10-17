@@ -1,0 +1,2 @@
+go test fuzz v1
+string("v=spf1 exists:%{p}.%{p}.example.org ptr ptr:example.com")

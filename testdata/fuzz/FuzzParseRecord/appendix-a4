@@ -1,0 +1,2 @@
+go test fuzz v1
+string("v=spf1 -include:ip4._spf.%{d} -include:ptr._spf.%{d} +all")

@@ -1,0 +1,4 @@
+go test fuzz v1
+string("v=spf1 include:inc.example.com -all")
+string("user@example.com")
+string("192.0.2.1")
