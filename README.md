@@ -162,7 +162,8 @@ written for this package.
 
 [CHECKLIST.md](CHECKLIST.md) lists the RFC's requirements item by item, and a
 small program, [`internal/checklist`](internal/checklist/main.go), checks it
-against the tests in CI. Other `go-*` libraries can copy both.
+against the tests in CI. The reusable workflow invokes this existing checker;
+other libraries keep their checked-in compatible checker and checklist.
 
 The checklist is a Markdown file holding one or more tables whose header is
 exactly:
@@ -202,6 +203,69 @@ func TestSyntaxErrorAnywhere(t *testing.T) {
 - an item lists a test that does not exist, or that does not name the item;
 - a test names an item that does not exist, is `n/a`, or does not list it;
 - a `Test` or `Fuzz` function names no item (`Example` functions may).
+
+### Reusable RFC verification workflow
+
+[`.github/workflows/rfc-verification.yml`](.github/workflows/rfc-verification.yml)
+is the shared `workflow_call` entry point. Our own CI calls it by local path,
+so the caller and workflow always come from the same commit. It retains Go
+1.25.10, build and vet of `./...`, golangci-lint v2.11.4, fresh race tests
+with atomic coverage, the fixed **95% minimum** (aiming for 100%), the existing
+checklist CLI, and each selected fuzz target for **30 seconds**. Failed runs
+upload `**/testdata/fuzz` crashers. Permissions remain `contents: read`; no
+secrets or caller-supplied commands or source refs are accepted.
+
+All inputs are typed GitHub strings containing nonempty JSON arrays:
+
+| Input | Default | Meaning |
+|-------|---------|---------|
+| `packages` | `["./..."]` | Local Go package patterns measured by race coverage. Include every implementation package; document intentional uncovered statements in `COVERAGE.md`. |
+| `checklist-dirs` | `["."]` | Local package directories scanned by `go run ./internal/checklist -file CHECKLIST.md`. No recursive patterns. |
+| `fuzz-targets` | Required | Objects with exactly `package` (one local package) and `target` (one exact `FuzzName`), e.g. `[{"package":".","target":"FuzzParseRecord"}]`. |
+
+Paths must be `.` or start with `./`; recursive `/...` is allowed only in
+`packages`. Flags, traversal, shell syntax, regex fuzz selectors, empty arrays
+and duplicate fuzz targets are refused. A named fuzz target must exist in
+`go test -list=^Fuzz` output; it is run with an anchored exact selector.
+Missing, duplicate, malformed or out-of-range coverage totals fail closed.
+Each caller supplies its own compatible `internal/checklist`, `CHECKLIST.md`,
+tests, `go.mod` and `COVERAGE.md`; this extraction does not remove checker
+implementations from other repositories.
+
+The caller keeps the existing required **Build & Test** context as an
+`always()` aggregate depending on both the reusable RFC job and the offline
+workflow fixtures. Only `success` from both yields success; failure,
+cancellation or a skipped job cannot satisfy the gate. Future callers should
+retain their required context with the same fail-closed aggregation pattern,
+since a reusable job adds its own nested check name.
+
+For future external callers, **after this PR merges**, review the merge commit
+and pin its full 40-character SHA in
+`rest-mail/go-spf/.github/workflows/rfc-verification.yml@<reviewed-merge-SHA>`.
+Use that as the job-level `uses`, and pass the three inputs with `with`, as in
+our [CI caller](.github/workflows/ci.yml). Do not copy our local workflow path
+into a different repository or pin an unpublished branch. Checkout inside the
+reusable job intentionally checks out the **caller** repository. The proof
+helper is embedded in the reusable YAML, so it needs no second checkout and
+does not infer the called repository from `github.workflow_sha`.
+
+This is the first host/self-call slice of
+[rest-mail-server#374](https://github.com/rest-mail/rest-mail-server/issues/374);
+cross-repository migration remains open. Workflow syntax and context behavior
+follow GitHub's [reusable workflow documentation](https://docs.github.com/en/actions/how-tos/reuse-automations/reuse-workflows)
+and [contexts reference](https://docs.github.com/en/actions/reference/workflows-and-actions/contexts).
+
+Focused offline gate fixtures (standard-library Python; a cached Go toolchain
+compiles only the existing checklist CLI):
+
+```sh
+GOMAXPROCS=1 python3 -m unittest discover -s .github/tests -v
+```
+
+The fixtures execute the embedded Python gate with recorded race/fuzz command
+execution and small synthetic coverage reports, plus the real checklist CLI
+against temporary checklists. They do not replace GitHub's actual race,
+coverage or 30-second fuzz proofs.
 
 ## Documentation
 
