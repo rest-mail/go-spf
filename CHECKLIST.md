@@ -17,23 +17,28 @@ SPF-RESULT-02/05) are mapped to executable usage examples. These examples
 run the public evaluator with injected DNS and check its results, query order
 and displayed text. They demonstrate compliant caller behaviour; the library
 still does not select identities, apply message disposition or present text
-on a caller's behalf. The remaining n/a rows retain their individual reasons,
-including SMTP and header handling outside this package and the
-nonconfigurable void limit.
+on a caller's behalf.
+
+Each of the ten n/a rows says which of three reasons applies: it is the
+caller's job (SPF-ID-02, SPF-ID-09, SPF-HDR-02), its condition does not hold
+(SPF-LIMIT-09), or covering it needs new public API that only the owner can
+decide on (the rest, listed under [Left for the owner](#left-for-the-owner)).
+No n/a row is mapped to a synthetic SMTP reply or header string written in a
+test, because that would prove the test, not the library.
 
 ## Identities (§2)
 
 | ID | Section | Level | Requirement | Tests |
 |----|---------|-------|-------------|-------|
 | SPF-ID-01 | 2.2, 4.1 | MUST | Evaluate check_host() with the client IP, the identity's domain, and the identity as the sender. | `TestCheckMailFromArguments`, `TestInvalidClientIP` |
-| SPF-ID-02 | 2.2 | NOT RECOMMENDED | Check identities other than MAIL FROM and HELO against SPF records without the publishing ADMD's approval. | n/a: the library checks the identity its caller passes; CheckMailFrom and CheckHELO are its only identity-specific entry points, and which identities to check is the receiver's policy. |
+| SPF-ID-02 | 2.2 | NOT RECOMMENDED | Check identities other than MAIL FROM and HELO against SPF records without the publishing ADMD's approval. | n/a: caller's job. CheckHost evaluates whatever identity its caller passes, as check_host() must; choosing which identities to check, and whether a publishing ADMD approved more than MAIL FROM and HELO, is the receiver's policy. |
 | SPF-ID-03 | 2.2 | Normative | Extract the domain from MAIL FROM correctly despite source routes, the %-hack and bang paths. | `TestCheckMailFromExtractsDomain` |
 | SPF-ID-04 | 2.3 | RECOMMENDED | Check the HELO identity separately, with the HELO name as the sender. | `TestCheckHELO` |
 | SPF-ID-05 | 2.3 | Normative | Perform the HELO check only when the HELO name is a valid multi-label domain name (an address literal is not). | `TestCheckHELOInvalid` |
 | SPF-ID-06 | 2.3 | RECOMMENDED | Check HELO before MAIL FROM when both are checked. | `ExampleCheckMailFrom_identityChecks` |
 | SPF-ID-07 | 2.4 | MUST | Check MAIL FROM when a HELO check was not performed or reached no definitive result. | `ExampleCheckMailFrom_identityChecks` |
 | SPF-ID-08 | 2.4 | Normative | With a null reverse-path, the MAIL FROM identity is postmaster@<HELO name>. | `TestCheckMailFromNullSender` |
-| SPF-ID-09 | 2.5 | SHOULD | Perform the check during the SMTP transaction that receives the mail. | n/a: when the check runs is the caller's; the library has no SMTP session. |
+| SPF-ID-09 | 2.5 | SHOULD | Perform the check during the SMTP transaction that receives the mail. | n/a: caller's job. When the check runs is decided by the receiving MTA; the library has no SMTP session to run it in. |
 
 ## Records (§3, §4.4, §4.5)
 
@@ -75,7 +80,7 @@ nonconfigurable void limit.
 | SPF-LIMIT-06 | 4.6.4 | SHOULD | Limit the elapsed time of an evaluation; exceeding it returns temperror. | `TestTimeout` |
 | SPF-LIMIT-07 | 4.6.4 | SHOULD | The elapsed-time limit allows at least 20 seconds. | `TestDefaultOptions` |
 | SPF-LIMIT-08 | 4.6.4, 11.1 | SHOULD | Limit void lookups (NXDOMAIN or no answers) to two; exceeding the limit returns permerror. | `TestVoidLookupLimit` |
-| SPF-LIMIT-09 | 4.6.4 | RECOMMENDED | If the void-lookup limit is configurable, it defaults to two. | n/a: the limit is fixed at two, not configurable. |
+| SPF-LIMIT-09 | 4.6.4 | RECOMMENDED | If the void-lookup limit is configurable, it defaults to two. | n/a: the condition does not hold. The void-lookup limit is fixed at two (`TestVoidLookupLimit`), not configurable. Making it configurable is new public API; see [Left for the owner](#left-for-the-owner). |
 
 ## Mechanisms (§5)
 
@@ -138,19 +143,19 @@ nonconfigurable void limit.
 |----|---------|-------|-------------|-------|
 | SPF-RESULT-01 | 2.6, 4.2 | Normative | check_host() returns one of none, neutral, pass, fail, softfail, temperror and permerror. | `TestSevenResults` |
 | SPF-RESULT-02 | 8.2 | MUST | Treat neutral exactly like none. | `ExampleResult_receiverPolicy` |
-| SPF-RESULT-03 | 8.4 | SHOULD | Reject a fail during SMTP with reply code 550 (5.7.1). | n/a: the library sends no SMTP replies. |
-| SPF-RESULT-04 | 8.4 | SHOULD | If a fail is accepted, add a Received-SPF or Authentication-Results field. | n/a: the library writes no header fields. |
+| SPF-RESULT-03 | 8.4 | SHOULD | Reject a fail during SMTP with reply code 550 (5.7.1). | n/a: needs new public API. The library sends no SMTP replies and has no Result-to-reply mapping; the receiving MTA sends 550 5.7.1. See [Left for the owner](#left-for-the-owner). |
+| SPF-RESULT-04 | 8.4 | SHOULD | If a fail is accepted, add a Received-SPF or Authentication-Results field. | n/a: needs new public API. The library writes no header fields; the caller adds Received-SPF or Authentication-Results from Response. See [Left for the owner](#left-for-the-owner). |
 | SPF-RESULT-05 | 8.5 | SHOULD NOT | Reject a message on softfail alone. | `ExampleResult_receiverPolicy` |
-| SPF-RESULT-06 | 8.6 | SHOULD | Reject a temperror during SMTP with reply code 451 (4.4.3). | n/a: the library sends no SMTP replies. |
-| SPF-RESULT-07 | 8.7 | SHOULD | Reject a permerror during SMTP with reply code 550 (5.5.2). | n/a: the library sends no SMTP replies. |
+| SPF-RESULT-06 | 8.6 | SHOULD | Reject a temperror during SMTP with reply code 451 (4.4.3). | n/a: needs new public API. The library sends no SMTP replies and has no Result-to-reply mapping; the receiving MTA sends 451 4.4.3. See [Left for the owner](#left-for-the-owner). |
+| SPF-RESULT-07 | 8.7 | SHOULD | Reject a permerror during SMTP with reply code 550 (5.5.2). | n/a: needs new public API. The library sends no SMTP replies and has no Result-to-reply mapping; the receiving MTA sends 550 5.5.2. See [Left for the owner](#left-for-the-owner). |
 
 ## Recording the result (§9)
 
 | ID | Section | Level | Requirement | Tests |
 |----|---------|-------|-------------|-------|
-| SPF-HDR-01 | 9 | RECOMMENDED | Record the result in the message header. | n/a: the library writes no header fields; its caller does. |
-| SPF-HDR-02 | 9.1 | MUST | Prepend Received-SPF above the receiver's Received field and above any other Received-SPF. | n/a: the library writes no header fields. |
-| SPF-HDR-03 | 9.1 | SHOULD | Give a comment and the client-ip, helo and envelope-from keys in Received-SPF. | n/a: the library writes no header fields; Response carries the mechanism and reason a caller needs. |
+| SPF-HDR-01 | 9 | RECOMMENDED | Record the result in the message header. | n/a: needs new public API. The library writes no header fields; its caller records the result. See [Left for the owner](#left-for-the-owner). |
+| SPF-HDR-02 | 9.1 | MUST | Prepend Received-SPF above the receiver's Received field and above any other Received-SPF. | n/a: caller's job. Placing a field in the message, above the receiver's own Received field, is the MTA's; the library sees no message. |
+| SPF-HDR-03 | 9.1 | SHOULD | Give a comment and the client-ip, helo and envelope-from keys in Received-SPF. | n/a: needs new public API. The library builds no Received-SPF field; Response carries the result, mechanism and reason a caller's field needs. See [Left for the owner](#left-for-the-owner). |
 | SPF-HDR-04 | 9.1, 11.5.1 | MUST | Header content holds no invalid characters or sender-supplied malicious data (the library's part: Reason and Explanation are printable US-ASCII). | `TestResponseTextIsPrintable` |
 
 ## Security (§11)
@@ -158,3 +163,14 @@ nonconfigurable void limit.
 | ID | Section | Level | Requirement | Tests |
 |----|---------|-------|-------------|-------|
 | SPF-SEC-01 | 11.5.3 | Normative | Be prepared for hostile content that macros carry from the sender into DNS queries. | `FuzzParseRecord`, `FuzzExpandMacros`, `FuzzCheckHost`, `TestHostileMacroInput` |
+
+## Left for the owner
+
+These rows could be covered by the library, but only by adding public API.
+Nothing here is decided; each needs the owner's call before anyone builds it.
+
+| Proposal | Rows it would cover | Notes |
+|----------|---------------------|-------|
+| An `Options` field for the void-lookup limit, defaulting to two. | SPF-LIMIT-09 | The row would then need a test that zero means two. A fixed limit already meets the RFC. |
+| A method on `Result` giving the SMTP reply code and enhanced status code §8 recommends (550 5.7.1, 451 4.4.3, 550 5.5.2). | SPF-RESULT-03, SPF-RESULT-06, SPF-RESULT-07 | The MTA would still choose whether to reject; the method only names the reply. |
+| A builder for the Received-SPF field value (result, comment, client-ip, helo, envelope-from, identity, receiver, mechanism keys), from a Response and the check's inputs. | SPF-HDR-01, SPF-HDR-03, SPF-RESULT-04 | Inputs would have to be checked against the §9.1 key-value grammar. Prepending the field (SPF-HDR-02) stays the MTA's job. |

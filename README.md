@@ -163,8 +163,11 @@ seconds, and their seed corpora are in `testdata/fuzz`.
 The coverage badge shows the enforced minimum; measured statement coverage
 is printed in each CI run's **RFC proof** log. The checklist badge counts
 requirements mapped to tests over all checklist rows, including the 10
-`n/a` rows with documented reasons. CI checks the badge against the actual
-checklist and its test mappings. The CI badge reports whether verification
+`n/a` rows with documented reasons. Each n/a row is either the caller's job,
+a condition that does not hold, or would need new public API; the last kind
+is listed for the owner in
+[CHECKLIST.md](CHECKLIST.md#left-for-the-owner). CI checks the badge against
+the actual checklist and its test mappings. The CI badge reports whether verification
 passed.
 
 The RFC's own examples are tests: the record evaluations of Appendix A and the

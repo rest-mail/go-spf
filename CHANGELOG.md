@@ -8,6 +8,11 @@ module tags of the form `vMAJOR.MINOR.PATCH`.
 
 ### Added
 
+- Every remaining n/a RFC 7208 row now says whether it is the caller's job, a
+  condition that does not hold, or needs new public API. The three API
+  proposals that would cover seven of them are listed in CHECKLIST.md's "Left
+  for the owner" section. README badge stays 78/88.
+
 - Five formerly n/a RFC 7208 rows now have executable caller examples covering
   HELO ordering and MAIL FROM fallback, third-party explanation attribution,
   neutral/none equivalence and softfail handling. Checklist mappings distinguish
