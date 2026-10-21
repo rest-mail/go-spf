@@ -8,6 +8,11 @@ module tags of the form `vMAJOR.MINOR.PATCH`.
 
 ### Added
 
+- Five formerly n/a RFC 7208 rows now have executable caller examples covering
+  HELO ordering and MAIL FROM fallback, third-party explanation attribution,
+  neutral/none equivalence and softfail handling. Checklist mappings distinguish
+  example behaviour from policy enforced by the library; README badge is 78/88.
+
 - README coverage-gate and RFC checklist badges, checked in CI against the
   enforced coverage minimum and the checklist's actual test mappings.
 

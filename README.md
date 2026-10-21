@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/rest-mail/go-spf/actions/workflows/ci.yml/badge.svg)](https://github.com/rest-mail/go-spf/actions/workflows/ci.yml)
 [![Coverage gate: >=95%](https://img.shields.io/badge/coverage%20gate-%3E%3D95%25-brightgreen)](COVERAGE.md)
-[![Checklist: 73/88 mapped](https://img.shields.io/badge/checklist-73%2F88%20mapped-blue)](CHECKLIST.md)
+[![Checklist: 78/88 mapped](https://img.shields.io/badge/checklist-78%2F88%20mapped-blue)](CHECKLIST.md)
 [![Go Reference](https://pkg.go.dev/badge/github.com/rest-mail/go-spf.svg)](https://pkg.go.dev/github.com/rest-mail/go-spf)
 [![Go Report Card](https://goreportcard.com/badge/github.com/rest-mail/go-spf)](https://goreportcard.com/report/github.com/rest-mail/go-spf)
 
@@ -93,6 +93,13 @@ US-ASCII, so they cannot break a header field or an SMTP reply.
 
 An IPv4-mapped IPv6 client address is checked as the IPv4 address it carries.
 
+Executable examples demonstrate checking HELO before MAIL FROM, checking
+MAIL FROM even when HELO gives no definitive result (or is not checked),
+attributing third-party explanations, and a receiver policy that treats
+`neutral` exactly like `none` and never rejects on `softfail` alone. These
+five checklist mappings prove the examples; callers remain responsible for
+identity selection, SMTP replies and message handling.
+
 ## DNS
 
 `Options.Resolver` takes any `Resolver`:
@@ -155,7 +162,7 @@ seconds, and their seed corpora are in `testdata/fuzz`.
 
 The coverage badge shows the enforced minimum; measured statement coverage
 is printed in each CI run's **RFC proof** log. The checklist badge counts
-requirements mapped to tests over all checklist rows, including the 15
+requirements mapped to tests over all checklist rows, including the 10
 `n/a` rows with documented reasons. CI checks the badge against the actual
 checklist and its test mappings. The CI badge reports whether verification
 passed.
