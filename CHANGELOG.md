@@ -6,6 +6,11 @@ module tags of the form `vMAJOR.MINOR.PATCH`.
 
 ## [Unreleased]
 
+### Added
+
+- README coverage-gate and RFC checklist badges, checked in CI against the
+  enforced coverage minimum and the checklist's actual test mappings.
+
 ## [0.1.0] - 2026-10-17
 
 ### Added

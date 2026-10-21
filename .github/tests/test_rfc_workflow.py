@@ -32,6 +32,19 @@ def configuration(packages=None, dirs=None, targets=None):
 
 
 class GateFixtures(unittest.TestCase):
+    def test_readme_coverage_badge_matches_enforced_minimum(self):
+        readme = (ROOT / 'README.md').read_text()
+        self.assertIn(
+            '[![Coverage gate: >=95%]'
+            '(https://img.shields.io/badge/coverage%20gate-%3E%3D95%25-brightgreen)]'
+            '(COVERAGE.md)', readme)
+        # Exercise the actual workflow helper, so a changed gate cannot leave
+        # the documented minimum stale. No coverage or race suite is run here.
+        with contextlib.redirect_stdout(io.StringIO()):
+            PROOF['coverage_total']('total: (statements) 95.0%\n')
+        with self.assertRaises(ValueError):
+            PROOF['coverage_total']('total: (statements) 94.99%\n')
+
     def test_coverage_accepts_boundary_and_higher(self):
         for total in ['95', '95.0', '95.01', '99.9', '100.0']:
             with self.subTest(total=total), contextlib.redirect_stdout(io.StringIO()):
