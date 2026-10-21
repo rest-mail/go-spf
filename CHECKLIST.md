@@ -12,6 +12,15 @@ policy, say) says "n/a" and why. CI checks this file against the tests with
 `go run ./internal/checklist`; the format is described in the
 [README](README.md#the-rfc-checklist).
 
+Five caller responsibilities (SPF-ID-06/07, SPF-MOD-09 and
+SPF-RESULT-02/05) are mapped to executable usage examples. These examples
+run the public evaluator with injected DNS and check its results, query order
+and displayed text. They demonstrate compliant caller behaviour; the library
+still does not select identities, apply message disposition or present text
+on a caller's behalf. The remaining n/a rows retain their individual reasons,
+including SMTP and header handling outside this package and the
+nonconfigurable void limit.
+
 ## Identities (§2)
 
 | ID | Section | Level | Requirement | Tests |
@@ -21,8 +30,8 @@ policy, say) says "n/a" and why. CI checks this file against the tests with
 | SPF-ID-03 | 2.2 | Normative | Extract the domain from MAIL FROM correctly despite source routes, the %-hack and bang paths. | `TestCheckMailFromExtractsDomain` |
 | SPF-ID-04 | 2.3 | RECOMMENDED | Check the HELO identity separately, with the HELO name as the sender. | `TestCheckHELO` |
 | SPF-ID-05 | 2.3 | Normative | Perform the HELO check only when the HELO name is a valid multi-label domain name (an address literal is not). | `TestCheckHELOInvalid` |
-| SPF-ID-06 | 2.3 | RECOMMENDED | Check HELO before MAIL FROM when both are checked. | n/a: the order of the two checks is the caller's; the package example and README show HELO first. |
-| SPF-ID-07 | 2.4 | MUST | Check MAIL FROM when a HELO check was not performed or reached no definitive result. | n/a: deciding which checks to run, and whether a HELO result is definitive, is the receiver's policy. |
+| SPF-ID-06 | 2.3 | RECOMMENDED | Check HELO before MAIL FROM when both are checked. | `ExampleCheckMailFrom_identityChecks` |
+| SPF-ID-07 | 2.4 | MUST | Check MAIL FROM when a HELO check was not performed or reached no definitive result. | `ExampleCheckMailFrom_identityChecks` |
 | SPF-ID-08 | 2.4 | Normative | With a null reverse-path, the MAIL FROM identity is postmaster@<HELO name>. | `TestCheckMailFromNullSender` |
 | SPF-ID-09 | 2.5 | SHOULD | Perform the check during the SMTP transaction that receives the mail. | n/a: when the check runs is the caller's; the library has no SMTP session. |
 
@@ -99,7 +108,7 @@ policy, say) says "n/a" and why. CI checks this file against the tests with
 | SPF-MOD-06 | 6.2 | Normative | The explanation TXT strings are concatenated and macro-expanded as an explain-string. | `TestExplanationMacros` |
 | SPF-MOD-07 | 6.2 | MUST | Limit the explanation string to US-ASCII. | `TestExplanationASCII` |
 | SPF-MOD-08 | 6.2 | MAY | Limit the length of the explanation string. | `TestExplanationLength` |
-| SPF-MOD-09 | 6.2 | SHOULD | Make clear that the explanation comes from a third party. | n/a: presentation is the caller's; Response.Explanation is documented as third-party text, and the example prefixes it with "example.com explains:". |
+| SPF-MOD-09 | 6.2 | SHOULD | Make clear that the explanation comes from a third party. | `Example` |
 | SPF-MOD-10 | 6.2 | MUST NOT | During include, do not use the exp of the included target. | `TestExplanationScope` |
 | SPF-MOD-11 | 6.2 | MUST NOT | After redirect, do not use the exp of the original domain. | `TestExplanationScope` |
 
@@ -128,10 +137,10 @@ policy, say) says "n/a" and why. CI checks this file against the tests with
 | ID | Section | Level | Requirement | Tests |
 |----|---------|-------|-------------|-------|
 | SPF-RESULT-01 | 2.6, 4.2 | Normative | check_host() returns one of none, neutral, pass, fail, softfail, temperror and permerror. | `TestSevenResults` |
-| SPF-RESULT-02 | 8.2 | MUST | Treat neutral exactly like none. | n/a: how a result is acted on is the receiver's policy; the library reports neutral and none distinctly, as Authentication-Results needs. |
+| SPF-RESULT-02 | 8.2 | MUST | Treat neutral exactly like none. | `ExampleResult_receiverPolicy` |
 | SPF-RESULT-03 | 8.4 | SHOULD | Reject a fail during SMTP with reply code 550 (5.7.1). | n/a: the library sends no SMTP replies. |
 | SPF-RESULT-04 | 8.4 | SHOULD | If a fail is accepted, add a Received-SPF or Authentication-Results field. | n/a: the library writes no header fields. |
-| SPF-RESULT-05 | 8.5 | SHOULD NOT | Reject a message on softfail alone. | n/a: acting on a result is the receiver's policy. |
+| SPF-RESULT-05 | 8.5 | SHOULD NOT | Reject a message on softfail alone. | `ExampleResult_receiverPolicy` |
 | SPF-RESULT-06 | 8.6 | SHOULD | Reject a temperror during SMTP with reply code 451 (4.4.3). | n/a: the library sends no SMTP replies. |
 | SPF-RESULT-07 | 8.7 | SHOULD | Reject a permerror during SMTP with reply code 550 (5.5.2). | n/a: the library sends no SMTP replies. |
 
