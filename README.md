@@ -1,6 +1,8 @@
 # go-spf
 
 [![CI](https://github.com/rest-mail/go-spf/actions/workflows/ci.yml/badge.svg)](https://github.com/rest-mail/go-spf/actions/workflows/ci.yml)
+[![Coverage gate: >=95%](https://img.shields.io/badge/coverage%20gate-%3E%3D95%25-brightgreen)](COVERAGE.md)
+[![Checklist: 73/88 mapped](https://img.shields.io/badge/checklist-73%2F88%20mapped-blue)](CHECKLIST.md)
 [![Go Reference](https://pkg.go.dev/badge/github.com/rest-mail/go-spf.svg)](https://pkg.go.dev/github.com/rest-mail/go-spf)
 [![Go Report Card](https://goreportcard.com/badge/github.com/rest-mail/go-spf)](https://goreportcard.com/report/github.com/rest-mail/go-spf)
 
@@ -150,6 +152,13 @@ purpose are listed, each with a reason, in [COVERAGE.md](COVERAGE.md). The fuzz
 targets are `FuzzParseRecord` (record parsing), `FuzzExpandMacros` (macro
 expansion) and `FuzzCheckHost` (whole evaluations); CI runs each for 30
 seconds, and their seed corpora are in `testdata/fuzz`.
+
+The coverage badge shows the enforced minimum; measured statement coverage
+is printed in each CI run's **RFC proof** log. The checklist badge counts
+requirements mapped to tests over all checklist rows, including the 15
+`n/a` rows with documented reasons. CI checks the badge against the actual
+checklist and its test mappings. The CI badge reports whether verification
+passed.
 
 The RFC's own examples are tests: the record evaluations of Appendix A and the
 macro expansions of section 7.4. The [open-spf.org RFC 7208 test
