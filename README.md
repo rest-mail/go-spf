@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/rest-mail/go-spf/actions/workflows/ci.yml/badge.svg)](https://github.com/rest-mail/go-spf/actions/workflows/ci.yml)
 [![Coverage gate: >=95%](https://img.shields.io/badge/coverage%20gate-%3E%3D95%25-brightgreen)](COVERAGE.md)
-[![Checklist: 78/88 mapped](https://img.shields.io/badge/checklist-78%2F88%20mapped-blue)](CHECKLIST.md)
+[![Checklist: 81/101 mapped](https://img.shields.io/badge/checklist-81%2F101%20mapped-blue)](CHECKLIST.md)
 [![Go Reference](https://pkg.go.dev/badge/github.com/rest-mail/go-spf.svg)](https://pkg.go.dev/github.com/rest-mail/go-spf)
 [![Go Report Card](https://goreportcard.com/badge/github.com/rest-mail/go-spf)](https://goreportcard.com/report/github.com/rest-mail/go-spf)
 
@@ -19,7 +19,9 @@ gets one of seven results: `none`, `neutral`, `pass`, `fail`, `softfail`,
 `temperror` or `permerror`.
 
 This package is a complete implementation of RFC 7208's `check_host()`
-function, checked item by item against the RFC in [CHECKLIST.md](CHECKLIST.md).
+function, checked against the RFC in [CHECKLIST.md](CHECKLIST.md). The
+checklist records the section audit and distinguishes evaluator proofs from
+publisher and MTA duties.
 
 ## Features
 
@@ -162,10 +164,10 @@ seconds, and their seed corpora are in `testdata/fuzz`.
 
 The coverage badge shows the enforced minimum; measured statement coverage
 is printed in each CI run's **RFC proof** log. The checklist badge counts
-requirements mapped to tests over all checklist rows, including the 10
-`n/a` rows with documented reasons. Each n/a row is either the caller's job,
-a condition that does not hold, or would need new public API; the last kind
-is listed for the owner in
+requirements mapped to tests over all checklist rows, including the 20
+`n/a` rows with documented reasons. Each n/a row names a publisher/caller duty,
+a condition that does not hold, or missing library functionality. The three
+API proposals remain undecided in
 [CHECKLIST.md](CHECKLIST.md#left-for-the-owner). CI checks the badge against
 the actual checklist and its test mappings. The CI badge reports whether verification
 passed.

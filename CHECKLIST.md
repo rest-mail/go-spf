@@ -1,11 +1,12 @@
 # RFC 7208 checklist
 
-Every requirement [RFC 7208](https://www.rfc-editor.org/rfc/rfc7208) places on
-an SPF verifier, item by item, with the tests that cover it. The list takes in
-every MUST, MUST NOT, SHOULD, SHOULD NOT, RECOMMENDED and NOT RECOMMENDED that
-applies to a verifier, plus the normative behaviour of check_host() that
-carries no keyword (level "Normative"; section 4 makes that whole description
-binding). Requirements on publishers of records are left out.
+Requirements from [RFC 7208](https://www.rfc-editor.org/rfc/rfc7208), with
+tests or explicit applicability reasons. The list includes MUST, MUST NOT,
+SHOULD, SHOULD NOT, RECOMMENDED and NOT RECOMMENDED clauses, plus normative
+check_host() behaviour without a keyword (level "Normative"; section 4 makes
+that whole description binding). Publisher-only requirements are recorded
+separately as n/a for this evaluator; n/a does not waive a publisher or MTA
+operator's RFC duties. The audit log below records the sections reviewed.
 
 An item that does not apply to a library (because it is the receiving MTA's
 policy, say) says "n/a" and why. CI checks this file against the tests with
@@ -19,12 +20,48 @@ and displayed text. They demonstrate compliant caller behaviour; the library
 still does not select identities, apply message disposition or present text
 on a caller's behalf.
 
-Each of the ten n/a rows says which of three reasons applies: it is the
-caller's job (SPF-ID-02, SPF-ID-09, SPF-HDR-02), its condition does not hold
-(SPF-LIMIT-09), or covering it needs new public API that only the owner can
-decide on (the rest, listed under [Left for the owner](#left-for-the-owner)).
+Each of the twenty n/a rows identifies a publisher or caller duty, a
+condition that does not hold (SPF-LIMIT-09), or missing library functionality.
+The three pending API proposals remain under
+[Left for the owner](#left-for-the-owner); none is implemented by this audit.
 No n/a row is mapped to a synthetic SMTP reply or header string written in a
 test, because that would prove the test, not the library.
+
+## Section audit (2026-10-22)
+
+Reviewed RFC 7208 §§1–15 in order, comparing every uppercase MUST/SHOULD
+(including negative forms and RECOMMENDED) with this inventory and reading
+its surrounding algorithm or applicability text. This is a requirements
+inventory audit, not a claim that every possible input has been tested.
+
+- §1: terminology and algorithm introduction; no additional verifier keyword
+  requirements. §2: identity, timing and result requirements already listed.
+- §3.1–3.3: TXT-only, concatenation and multiple-record requirements already
+  listed. §3.4–3.5: add publisher size and wildcard duties (SPF-PUB-01/02).
+- §4.1–4.8: existing evaluation and limit rows retained; add explicit proof
+  that expanded target names undergo no further escaping (SPF-EVAL-12).
+- §5.1–5.7: existing mechanism requirements retained; add the omitted ptr
+  publication and placement recommendations (SPF-PUB-03/04).
+- §6–6.2: add publication ordering advice (SPF-PUB-05/06), acceptance of all
+  modifier positions (SPF-MOD-12) and deferred exp processing (SPF-MOD-13).
+- §7.1–7.4: existing macro rules retained; add recommendations against
+  publishing trailing dots and the p macro (SPF-PUB-07/08).
+- §8.1–8.7: result handling already listed; no SMTP mapping API added.
+- §9–9.2: split the SHOULD above Received from the MUST above all
+  Received-SPF fields (SPF-HDR-06/02); add full-field length duty
+  (SPF-HDR-05). §9.2 adds no uppercase MUST/SHOULD clauses.
+- §10.1–10.3: explicitly non-normative operational guidance. §11.1–11.7:
+  security considerations reviewed against existing limits, printable text
+  and hostile-macro proofs; full header safety remains a caller duty.
+- §12: collected ABNF reviewed against existing syntax/macro rows and new
+  modifier-position proof. §§13–15: acknowledgements, IANA actions and
+  references; retired RR type 99 prohibition is already SPF-REC-01.
+- Appendices A–G: examples, implementation changes and operational/testing
+  advice reviewed as context; Appendix A and §7.4 already have tests.
+
+Thirteen new rows: three mapped to new evaluator tests and ten explicit n/a
+publisher/header duties. Total: 101 rows, 81 mapped and 20 n/a. No changes to
+public API or the three owner proposals.
 
 ## Identities (§2)
 
@@ -67,6 +104,7 @@ test, because that would prove the test, not the library.
 | SPF-EVAL-09 | 4.7 | Normative | When no mechanism matches and there is no redirect, return neutral. | `TestDefaultResult` |
 | SPF-EVAL-10 | 4.8 | Normative | A mechanism without a domain-spec uses the current <domain> as its target-name. | `TestDefaultTargetName` |
 | SPF-EVAL-11 | 4.8 | Normative | Handle a syntactically invalid target-name after macro expansion consistently (here: a name that does not exist; permerror for include and redirect). | `TestMalformedTargetName` |
+| SPF-EVAL-12 | 4.8 | Normative | Do not apply further escaping to the expanded domain-spec used as a DNS target. | `TestExpandedTargetNotEscaped` |
 
 ## Processing limits (§4.6.4)
 
@@ -116,6 +154,8 @@ test, because that would prove the test, not the library.
 | SPF-MOD-09 | 6.2 | SHOULD | Make clear that the explanation comes from a third party. | `Example` |
 | SPF-MOD-10 | 6.2 | MUST NOT | During include, do not use the exp of the included target. | `TestExplanationScope` |
 | SPF-MOD-11 | 6.2 | MUST NOT | After redirect, do not use the exp of the original domain. | `TestExplanationScope` |
+| SPF-MOD-12 | 6, 6.1 | Normative | Accept redirect and exp anywhere among mechanisms and in either order; publication ordering advice does not restrict evaluation. | `TestModifierPositions` |
+| SPF-MOD-13 | 4.6.4, 6.2 | Normative | Fetch and expand exp only for the final fail from a matching mechanism, not during mechanism evaluation or for a discarded include result. | `TestExplanationLookupTiming` |
 
 ## Macros (§7)
 
@@ -154,9 +194,30 @@ test, because that would prove the test, not the library.
 | ID | Section | Level | Requirement | Tests |
 |----|---------|-------|-------------|-------|
 | SPF-HDR-01 | 9 | RECOMMENDED | Record the result in the message header. | n/a: needs new public API. The library writes no header fields; its caller records the result. See [Left for the owner](#left-for-the-owner). |
-| SPF-HDR-02 | 9.1 | MUST | Prepend Received-SPF above the receiver's Received field and above any other Received-SPF. | n/a: caller's job. Placing a field in the message, above the receiver's own Received field, is the MTA's; the library sees no message. |
+| SPF-HDR-02 | 9.1 | MUST | Place the new Received-SPF above every other Received-SPF field. | n/a: caller's job. Ordering a new field above existing Received-SPF fields is the MTA's; the library sees no message. |
 | SPF-HDR-03 | 9.1 | SHOULD | Give a comment and the client-ip, helo and envelope-from keys in Received-SPF. | n/a: needs new public API. The library builds no Received-SPF field; Response carries the result, mechanism and reason a caller's field needs. See [Left for the owner](#left-for-the-owner). |
 | SPF-HDR-04 | 9.1, 11.5.1 | MUST | Header content holds no invalid characters or sender-supplied malicious data (the library's part: Reason and Explanation are printable US-ASCII). | `TestResponseTextIsPrintable` |
+| SPF-HDR-05 | 9.1 | MUST | Keep the complete Received-SPF field within RFC 5322 length limits. | n/a: caller's job. The library does not build or fold header fields. Printable Reason/Explanation text alone proves neither complete-field line lengths nor correct quoting; the MTA must validate its assembled field. |
+| SPF-HDR-06 | 9.1 | SHOULD | Prepend Received-SPF above the receiver's own Received field. | n/a: caller's job. The evaluator receives no message or Received fields; the MTA controls insertion order. This SHOULD is separate from SPF-HDR-02's MUST. |
+
+## Publisher duties (§3, §5–§7)
+
+These clauses govern records and DNS zones published by an ADMD. This
+library evaluates existing records; it has no record generator, zone editor
+or publication linter. Their n/a status is a scope boundary, not evidence
+that a deployed publisher complies. Verifiers must still accept syntactically
+valid records that depart from publication recommendations.
+
+| ID | Section | Level | Requirement | Tests |
+|----|---------|-------|-------------|-------|
+| SPF-PUB-01 | 3.4 | SHOULD | Keep published SPF records small enough that the DNS query response fits within 512 octets. | n/a: publisher's job. Response size includes DNS names and other TXT records outside the evaluator's input; the library publishes no DNS data. |
+| SPF-PUB-02 | 3.5 | MUST | When using wildcard SPF declarations, repeat the declaration for hosts with any resource records and their subdomains. | n/a: publisher's job. The authoritative zone operator supplies these records; the evaluator cannot enumerate or edit the zone. |
+| SPF-PUB-03 | 5.5 | SHOULD NOT | Publish the ptr mechanism. | n/a: publisher's job. The evaluator must support ptr (SPF-MECH-10); it does not choose mechanisms for an ADMD's records. |
+| SPF-PUB-04 | 5.5 | SHOULD | If ptr is used, place it among the last mechanisms checked. | n/a: publisher's job. Mechanism order is chosen in the published record; the verifier preserves that order (SPF-EVAL-07). |
+| SPF-PUB-05 | 6 | SHOULD | Place redirect and exp after all mechanisms at the end of the record. | n/a: publisher's job. No record generation/linting API; acceptance of other legal positions is separately proved by SPF-MOD-12. |
+| SPF-PUB-06 | 6.1 | SHOULD | Place redirect as the very last term for clarity. | n/a: publisher's job. No record generation/linting API; the verifier must still accept other positions (SPF-MOD-12). |
+| SPF-PUB-07 | 7.3 | SHOULD NOT | Publish trailing dots in domain names. | n/a: publisher's job. The verifier must accept trailing dots (SPF-MACRO-05), regardless of this interoperability advice to publishers. |
+| SPF-PUB-08 | 7.3 | SHOULD NOT | Publish the p macro. | n/a: publisher's job. Choosing record content belongs to the ADMD; the evaluator still implements validated-name expansion (SPF-MACRO-10). |
 
 ## Security (§11)
 
