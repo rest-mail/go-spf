@@ -1,6 +1,8 @@
 # RFC 7208 checklist
 
-Requirements from [RFC 7208](https://www.rfc-editor.org/rfc/rfc7208), with
+Requirements from [RFC 7208](https://www.rfc-editor.org/rfc/rfc7208), and
+the SPF section of [RFC 8616](https://www.rfc-editor.org/rfc/rfc8616) which
+updates it for internationalized mail, with
 tests or explicit applicability reasons. The list includes MUST, MUST NOT,
 SHOULD, SHOULD NOT, RECOMMENDED and NOT RECOMMENDED clauses, plus normative
 check_host() behaviour without a keyword (level "Normative"; section 4 makes
@@ -63,6 +65,15 @@ Thirteen new rows: three mapped to new evaluator tests and ten explicit n/a
 publisher/header duties. Total: 101 rows, 81 mapped and 20 n/a. No changes to
 public API or the three owner proposals.
 
+## RFC 8616 audit (2026-10-22)
+
+Reviewed RFC 8616 §4 (SPF and internationalized mail). Its U-label to
+A-label conversion for the checked names and the macro-expanded names is
+SPF-EAI-01/02; its note on UTF-8 local-parts in %{s} and %{l} is SPF-EAI-03.
+Its restatement that record IDNs MUST be A-labels is SPF-EVAL-03, now
+narrowed to records. Before this audit a U-label MAIL FROM domain gave
+`none`. Three new mapped rows. Total: 104 rows, 84 mapped and 20 n/a.
+
 ## Identities (§2)
 
 | ID | Section | Level | Requirement | Tests |
@@ -95,7 +106,7 @@ public API or the three owner proposals.
 |----|---------|-------|-------------|-------|
 | SPF-EVAL-01 | 4 | MUST | Produce results semantically equivalent to the check_host() description (shown on the RFC's own examples and on cases equivalent to the open-spf.org suite). | `FuzzCheckHost`, `TestAppendixA1`, `TestAppendixA2`, `TestAppendixA3`, `TestAppendixA4`, `TestOpenSPFEquivalents` |
 | SPF-EVAL-02 | 4.3 | Normative | Return none for a malformed domain (label over 63 characters, empty label, over 253 characters) or one that is not multi-label. | `TestCheckHELOInvalid`, `TestMalformedDomain` |
-| SPF-EVAL-03 | 4.3 | MUST | Internationalized domain names are encoded as A-labels (a U-label domain is malformed). | `TestInternationalizedDomain` |
+| SPF-EVAL-03 | 4.3 | MUST | Internationalized domain names in a record are encoded as A-labels (a U-label domain-spec is a syntax error). U-labels in an identity are converted first: SPF-EAI-01. | `TestInternationalizedDomain` |
 | SPF-EVAL-04 | 4.3 | Normative | Substitute "postmaster" for a missing local-part of the sender. | `TestSenderWithoutLocalPart` |
 | SPF-EVAL-05 | 4.6 | Normative | Validate the syntax of the whole record first; a syntax error anywhere returns permerror before any term is evaluated. | `TestSyntaxErrorAnywhere` |
 | SPF-EVAL-06 | 4.6.1, 12 | Normative | Parse terms by the ABNF: separated by spaces, modifiers are name "=" value, names case-insensitive, anything else a syntax error. | `TestRecordSyntax`, `FuzzParseRecord` |
@@ -105,6 +116,16 @@ public API or the three owner proposals.
 | SPF-EVAL-10 | 4.8 | Normative | A mechanism without a domain-spec uses the current <domain> as its target-name. | `TestDefaultTargetName` |
 | SPF-EVAL-11 | 4.8 | Normative | Handle a syntactically invalid target-name after macro expansion consistently (here: a name that does not exist; permerror for include and redirect). | `TestMalformedTargetName` |
 | SPF-EVAL-12 | 4.8 | Normative | Do not apply further escaping to the expanded domain-spec used as a DNS target. | `TestExpandedTargetNotEscaped` |
+
+## Internationalized mail (RFC 8616 §4)
+
+Section numbers in this table are RFC 8616's.
+
+| ID | Section | Level | Requirement | Tests |
+|----|---------|-------|-------------|-------|
+| SPF-EAI-01 | 4 | MUST | Convert all U-labels to A-labels before the SPF check: the MAIL FROM domain (which may arrive as U-labels with SMTPUTF8) and the HELO name. | `TestRFC8616ULabels`, `TestToALabels` |
+| SPF-EAI-02 | 4 | MUST | The labels used in macro expansion of a domain-spec are A-labels too (%{d}, %{o}, the domain of %{s}, %{h}). | `TestRFC8616MacroALabels` |
+| SPF-EAI-03 | 4 | Normative | A UTF-8 local-part is not converted, so %{s} and %{l} built from one are unlikely to match: the name is not valid and the term does not match. | `TestRFC8616LocalPart` |
 
 ## Processing limits (§4.6.4)
 

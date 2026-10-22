@@ -6,7 +6,17 @@ module tags of the form `vMAJOR.MINOR.PATCH`.
 
 ## [Unreleased]
 
+### Changed
+
+- **Breaking:** RFC 8616 §4: a U-label MAIL FROM domain, sender domain or HELO
+  name is now converted to A-labels and checked, instead of giving `none` as
+  a malformed name. Macros expand the A-label form. Names that are not valid
+  UTF-8 still give `none`; U-labels in a record are still a syntax error.
+
 ### Added
+
+- RFC 8616 §4 checklist rows SPF-EAI-01 to 03 and their tests. README
+  checklist badge is now 84/104.
 
 - RFC 7208 section audit: 13 additional checklist rows, including previously
   omitted publisher recommendations and full-header length/ordering duties.

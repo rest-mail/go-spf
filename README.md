@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/rest-mail/go-spf/actions/workflows/ci.yml/badge.svg)](https://github.com/rest-mail/go-spf/actions/workflows/ci.yml)
 [![Coverage gate: >=95%](https://img.shields.io/badge/coverage%20gate-%3E%3D95%25-brightgreen)](COVERAGE.md)
-[![Checklist: 81/101 mapped](https://img.shields.io/badge/checklist-81%2F101%20mapped-blue)](CHECKLIST.md)
+[![Checklist: 84/104 mapped](https://img.shields.io/badge/checklist-84%2F104%20mapped-blue)](CHECKLIST.md)
 [![Go Reference](https://pkg.go.dev/badge/github.com/rest-mail/go-spf.svg)](https://pkg.go.dev/github.com/rest-mail/go-spf)
 [![Go Report Card](https://goreportcard.com/badge/github.com/rest-mail/go-spf)](https://goreportcard.com/report/github.com/rest-mail/go-spf)
 
@@ -86,6 +86,15 @@ func main() {
 - `CheckHELO(ctx, ip, helo, opts)` checks the `HELO` identity. A HELO that is
   not a multi-label domain name (an address literal, say) gives `none`.
 - `CheckHost(ctx, ip, domain, sender, helo, opts)` is `check_host()` itself.
+
+Internationalized names (RFC 8616 §4): U-labels in the domain, in the
+sender's domain and in the HELO name are converted to A-labels (`xn--`
+punycode) before the check, so `a@bücher.example` looks up
+`xn--bcher-kva.example` and `%{d}`, `%{o}`, `%{s}` and `%{h}` expand to
+A-labels. A UTF-8 local-part is left as it is, so `%{l}` and `%{s}` built
+from one rarely match. Names in a published record must already be A-labels.
+The conversion lower-cases a non-ASCII label but does not apply the full
+IDNA2008 mapping (NFC normalization, special folds such as ß).
 
 Each returns a `Response`: the `Result`; the `Mechanism` that decided it (or
 `default` when the record's implicit `?all` applied); for a `fail`, the
