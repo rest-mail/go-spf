@@ -214,14 +214,34 @@ func TestMalformedDomain(t *testing.T) {
 	want(t, "trailing dot", mailFrom(z, "192.0.2.1", "a@example.com."), ResultPass)
 }
 
-// TestInternationalizedDomain checks that an internationalized domain must
-// arrive as A-labels: a U-label domain is malformed, the A-label form works.
+// TestInternationalizedDomain checks that internationalized names in a record
+// must be A-labels (§4.3; RFC 8616 §4 leaves this unchanged): a U-label in a
+// domain-spec is outside the macro-string grammar, so the record is a syntax
+// error (permerror) and the name is never queried, while the A-label form
+// works.
 //
 // checklist: SPF-EVAL-03
 func TestInternationalizedDomain(t *testing.T) {
-	z := zone("xn--bcher-kva.example TXT v=spf1 +all")
-	want(t, "A-label", mailFrom(z, "192.0.2.1", "a@xn--bcher-kva.example"), ResultPass)
-	want(t, "U-label", mailFrom(z, "192.0.2.1", "a@bücher.example"), ResultNone)
+	for rec, result := range map[string]Result{
+		"v=spf1 a:xn--bcher-kva.example -all":       ResultPass,
+		"v=spf1 a:bücher.example -all":              ResultPermError,
+		"v=spf1 include:xn--bcher-kva.example -all": ResultPass,
+		"v=spf1 include:bücher.example -all":        ResultPermError,
+	} {
+		z := zone(
+			"example.com TXT "+rec,
+			"xn--bcher-kva.example TXT v=spf1 +all",
+			"xn--bcher-kva.example A 192.0.2.1",
+			"bücher.example TXT v=spf1 +all",
+			"bücher.example A 192.0.2.1",
+		)
+		want(t, rec, mailFrom(z, "192.0.2.1", "a@example.com"), result)
+		for _, q := range z.queries {
+			if strings.Contains(q, "ü") {
+				t.Errorf("%s: queried U-label name %q", rec, q)
+			}
+		}
+	}
 }
 
 // TestSyntaxErrorAnywhere checks that the whole record is validated before

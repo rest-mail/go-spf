@@ -152,7 +152,9 @@ func CheckMailFrom(ctx context.Context, ip netip.Addr, mailFrom, helo string, op
 // policy of domain for a client at ip, where sender is the identity being
 // checked (an address, or a bare domain whose local-part becomes
 // "postmaster") and helo is the HELO/EHLO name for the %{h} macro. An
-// IPv4-mapped IPv6 address is checked as the IPv4 address it carries.
+// IPv4-mapped IPv6 address is checked as the IPv4 address it carries. U-labels
+// in domain, in sender's domain and in helo are converted to A-labels first
+// (RFC 8616 §4).
 func CheckHost(ctx context.Context, ip netip.Addr, domain, sender, helo string, opts *Options) Response {
 	if opts == nil {
 		opts = &Options{}
@@ -166,6 +168,16 @@ func CheckHost(ctx context.Context, ip netip.Addr, domain, sender, helo string, 
 	}
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
+
+	// RFC 8616 §4: U-labels become A-labels before the check, in the queried
+	// domain and in the names the macros expand. The sender's local-part is
+	// left as it is; an EAI local-part in %{s} or %{l} will rarely match.
+	domain, helo = toALabels(domain), toALabels(helo)
+	if i := strings.LastIndexByte(sender, '@'); i >= 0 {
+		sender = sender[:i+1] + toALabels(sender[i+1:])
+	} else {
+		sender = toALabels(sender)
+	}
 
 	e := newEvaluator(ctx, ip, domain, sender, helo, opts)
 	o := e.checkHost(strings.TrimSuffix(domain, "."))
