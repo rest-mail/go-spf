@@ -8,6 +8,12 @@ module tags of the form `vMAJOR.MINOR.PATCH`.
 
 ### Added
 
+- RFC 7208 section audit: 13 additional checklist rows, including previously
+  omitted publisher recommendations and full-header length/ordering duties.
+  New evaluator tests prove modifier positions, deferred explanation DNS and
+  literal expanded target names. README checklist badge is now 81/101; the
+  three owner API proposals remain undecided.
+
 - Every remaining n/a RFC 7208 row now says whether it is the caller's job, a
   condition that does not hold, or needs new public API. The three API
   proposals that would cover seven of them are listed in CHECKLIST.md's "Left
