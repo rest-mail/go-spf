@@ -123,7 +123,7 @@ Section numbers in this table are RFC 8616's.
 
 | ID | Section | Level | Requirement | Tests |
 |----|---------|-------|-------------|-------|
-| SPF-EAI-01 | 4 | MUST | Convert all U-labels to A-labels before the SPF check: the MAIL FROM domain (which may arrive as U-labels with SMTPUTF8) and the HELO name. | `TestRFC8616ULabels`, `TestToALabels` |
+| SPF-EAI-01 | 4 | MUST | Convert all U-labels to A-labels before the SPF check: the MAIL FROM domain (which may arrive as U-labels with SMTPUTF8) and the HELO name. | `TestRFC8616ULabels`, `TestToALabels`, `TestRFC8616InvalidULabels` |
 | SPF-EAI-02 | 4 | MUST | The labels used in macro expansion of a domain-spec are A-labels too (%{d}, %{o}, the domain of %{s}, %{h}). | `TestRFC8616MacroALabels` |
 | SPF-EAI-03 | 4 | Normative | A UTF-8 local-part is not converted, so %{s} and %{l} built from one are unlikely to match: the name is not valid and the term does not match. | `TestRFC8616LocalPart` |
 

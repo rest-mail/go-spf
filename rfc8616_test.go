@@ -95,9 +95,43 @@ func TestToALabels(t *testing.T) {
 		"xn--bcher-kva.example": "xn--bcher-kva.example",
 		"example.com":           "example.com",
 		"b\xffcher.example":     "b\xffcher.example",
+		// Refused U-labels leave the name as it is (TestRFC8616InvalidULabels).
+		"a\u200db.example": "a\u200db.example",
+		"-bücher.example":  "-bücher.example",
 	} {
 		if got := toALabels(in); got != out {
 			t.Errorf("toALabels(%q) = %q, want %q", in, got, out)
 		}
 	}
+}
+
+// TestRFC8616InvalidULabels checks that a U-label IDNA2008 cannot allow is not
+// converted: the name stays malformed, the result is none, and nothing is
+// looked up, for the MAIL FROM domain and the HELO name alike.
+//
+// checklist: SPF-EAI-01
+func TestRFC8616InvalidULabels(t *testing.T) {
+	for _, name := range []string{
+		"a\u200db.example",     // ZERO WIDTH JOINER, no virama before it
+		"a\u200cb.example",     // ZERO WIDTH NON-JOINER
+		"\u0301bcher.example",  // the label begins with a combining mark
+		"bü\u202echer.example", // RIGHT-TO-LEFT OVERRIDE, a format character
+		"bü cher.example",      // a space
+		"bü\u3000cher.example", // IDEOGRAPHIC SPACE
+		"-bücher.example",      // leading hyphen
+		"bücher-.example",      // trailing hyphen
+		"bü--cher.example",     // "--" in the third and fourth positions
+		"bücher..example",      // an empty label
+	} {
+		z := zone()
+		want(t, name+" MAIL FROM", mailFrom(z, "192.0.2.1", "a@"+name), ResultNone)
+		got := CheckHELO(context.Background(), netip.MustParseAddr("192.0.2.1"), name, opts(z))
+		want(t, name+" HELO", got, ResultNone)
+		if len(z.queries) != 0 {
+			t.Errorf("%q: queries = %v, want none", name, z.queries)
+		}
+	}
+	// A valid U-label beside them is still converted and checked.
+	z := zone("xn--bcher-kva.example TXT v=spf1 ip4:192.0.2.1 -all")
+	want(t, "valid U-label", mailFrom(z, "192.0.2.1", "a@bücher.example"), ResultPass)
 }

@@ -3,6 +3,7 @@ package spf
 import (
 	"math"
 	"strings"
+	"unicode"
 	"unicode/utf8"
 )
 
@@ -14,18 +15,61 @@ import (
 // punycode-encoded. A name that is not valid UTF-8 is returned unchanged, so
 // it stays malformed (§4.3) and gives none.
 //
-// The full IDNA2008 mapping (NFC normalization, special folds such as ß, and
-// label validation) is out of scope for a dependency-free evaluator; only
-// deliberately unusual spellings differ.
+// A name with a U-label that IDNA2008 cannot allow is returned unchanged as
+// well, so it is malformed and gives none, and nothing is looked up for it:
+// see validULabel for what is refused. The rest of IDNA2008 (NFC
+// normalization, special folds such as ß, the per-code-point tables) is out of
+// scope for a dependency-free evaluator; only deliberately unusual spellings
+// differ.
 func toALabels(domain string) string {
 	if isASCII(domain) || !utf8.ValidString(domain) {
 		return domain
 	}
 	labels := strings.Split(domain, ".")
 	for i, label := range labels {
+		if !isASCII(label) && !validULabel(label) {
+			return domain
+		}
 		labels[i] = labelToASCII(label)
 	}
 	return strings.Join(labels, ".")
+}
+
+// validULabel reports whether a non-ASCII label passes the IDNA2008 checks
+// that need no Unicode tables (RFC 5891 §4.2.3, RFC 5892):
+//   - no control, format, surrogate, private-use or separator code point,
+//     all DISALLOWED;
+//   - no ZERO WIDTH NON-JOINER or ZERO WIDTH JOINER (U+200C, U+200D). They
+//     are CONTEXTJ, valid only after a virama (RFC 5892 Appendix A.1, A.2),
+//     and telling a virama apart needs the combining-class table, so both are
+//     refused: a rare valid name gives none rather than an invalid one being
+//     looked up;
+//   - it does not begin with a combining mark (§4.2.3.2);
+//   - it neither begins nor ends with a hyphen, and has no "--" in its third
+//     and fourth positions (§4.2.3.1).
+func validULabel(label string) bool {
+	runes := []rune(label)
+	if len(runes) == 0 {
+		return false
+	}
+	if unicode.Is(unicode.M, runes[0]) {
+		return false
+	}
+	if runes[0] == '-' || runes[len(runes)-1] == '-' {
+		return false
+	}
+	if len(runes) >= 4 && runes[2] == '-' && runes[3] == '-' {
+		return false
+	}
+	for _, r := range runes {
+		switch {
+		case r == 0x200C, r == 0x200D:
+			return false
+		case unicode.In(r, unicode.Cc, unicode.Cf, unicode.Cs, unicode.Co, unicode.Z):
+			return false
+		}
+	}
+	return true
 }
 
 // labelToASCII returns the A-label form of one DNS label. An all-ASCII label
