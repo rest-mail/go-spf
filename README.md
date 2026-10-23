@@ -94,7 +94,13 @@ punycode) before the check, so `a@bücher.example` looks up
 A-labels. A UTF-8 local-part is left as it is, so `%{l}` and `%{s}` built
 from one rarely match. Names in a published record must already be A-labels.
 The conversion lower-cases a non-ASCII label but does not apply the full
-IDNA2008 mapping (NFC normalization, special folds such as ß).
+IDNA2008 mapping (NFC normalization, special folds such as ß). A U-label that
+IDNA2008 cannot allow is not converted: one with a control, format, space or
+private-use code point, a ZERO WIDTH (NON-)JOINER, a leading combining mark, a
+leading or trailing hyphen, or `--` in its third and fourth positions. Such a
+name gives `none`, and nothing is looked up for it. The joiners are valid after
+a virama, which needs a Unicode table this package does not carry, so a name
+that uses one that way also gives `none`.
 
 Each returns a `Response`: the `Result`; the `Mechanism` that decided it (or
 `default` when the record's implicit `?all` applied); for a `fail`, the

@@ -6,6 +6,16 @@ module tags of the form `vMAJOR.MINOR.PATCH`.
 
 ## [Unreleased]
 
+### Fixed
+
+- A U-label that IDNA2008 cannot allow is no longer converted and looked up
+  (#8): one with a control, format, space or private-use code point, a ZERO
+  WIDTH (NON-)JOINER, a leading combining mark, or a hyphen in a forbidden
+  place. The name stays malformed and gives `none`, with no DNS query, as any
+  non-ASCII name did before 0.1.1.
+
+## [0.1.1] - 2026-10-23
+
 ### Changed
 
 - **Breaking:** RFC 8616 §4: a U-label MAIL FROM domain, sender domain or HELO
