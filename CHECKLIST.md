@@ -250,10 +250,13 @@ valid records that depart from publication recommendations.
 ## Left for the owner
 
 These rows could be covered by the library, but only by adding public API.
-Nothing here is decided; each needs the owner's call before anyone builds it.
+None is built yet. The README's
+[What it does not do](README.md#what-it-does-not-do) records the decision on
+each: the void-lookup setting is declined by design, and the other two are
+planned.
 
 | Proposal | Rows it would cover | Notes |
 |----------|---------------------|-------|
-| An `Options` field for the void-lookup limit, defaulting to two. | SPF-LIMIT-09 | The row would then need a test that zero means two. A fixed limit already meets the RFC. |
-| A method on `Result` giving the SMTP reply code and enhanced status code §8 recommends (550 5.7.1, 451 4.4.3, 550 5.5.2). | SPF-RESULT-03, SPF-RESULT-06, SPF-RESULT-07 | The MTA would still choose whether to reject; the method only names the reply. |
-| A builder for the Received-SPF field value (result, comment, client-ip, helo, envelope-from, identity, receiver, mechanism keys), from a Response and the check's inputs. | SPF-HDR-01, SPF-HDR-03, SPF-RESULT-04 | Inputs would have to be checked against the §9.1 key-value grammar. Prepending the field (SPF-HDR-02) stays the MTA's job. |
+| An `Options` field for the void-lookup limit, defaulting to two. | SPF-LIMIT-09 | Declined by design. The row would then need a test that zero means two. A fixed limit already meets the RFC. |
+| A method on `Result` giving the SMTP reply code and enhanced status code §8 recommends (550 5.7.1, 451 4.4.3, 550 5.5.2). | SPF-RESULT-03, SPF-RESULT-06, SPF-RESULT-07 | Planned: [#10](https://github.com/rest-mail/go-spf/issues/10). The MTA would still choose whether to reject; the method only names the reply. |
+| A builder for the Received-SPF field value (result, comment, client-ip, helo, envelope-from, identity, receiver, mechanism keys), from a Response and the check's inputs. | SPF-HDR-01, SPF-HDR-03, SPF-RESULT-04 | Planned: [#11](https://github.com/rest-mail/go-spf/issues/11). Inputs would have to be checked against the §9.1 key-value grammar. Prepending the field (SPF-HDR-02) stays the MTA's job. |
