@@ -15,11 +15,11 @@ jobs:
     uses: ./.github/workflows/rfc-verification.yml
     with:
       packages: '["./..."]'
-      checklist-dirs: '["."]'
+      checklist-dirs: '["./pkg/spf", "./pkg/spf/rfctest", "./pkg/spf/internal/syntax", "./pkg/spf/internal/idna"]'
       fuzz-targets: >-
-        [{"package":".","target":"FuzzParseRecord"},
-         {"package":".","target":"FuzzExpandMacros"},
-         {"package":".","target":"FuzzCheckHost"}]
+        [{"package":"./pkg/spf","target":"FuzzParseRecord"},
+         {"package":"./pkg/spf","target":"FuzzExpandMacros"},
+         {"package":"./pkg/spf","target":"FuzzCheckHost"}]
 
   fixtures:
     name: Workflow fixtures

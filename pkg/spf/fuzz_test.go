@@ -5,6 +5,8 @@ import (
 	"net/netip"
 	"strings"
 	"testing"
+
+	"github.com/rest-mail/go-spf/pkg/spf/internal/syntax"
 )
 
 // Fuzz tests. Their seed corpora are in testdata/fuzz/<FuzzName>; CI runs each
@@ -23,29 +25,29 @@ var results = map[Result]bool{
 func FuzzParseRecord(f *testing.F) {
 	f.Add("v=spf1 a mx -all")
 	f.Fuzz(func(t *testing.T, txt string) {
-		rec, err := parseRecord(txt)
+		rec, err := syntax.ParseRecord(txt)
 		if err != nil {
 			return
 		}
-		if !isSPFRecord(txt) {
+		if !syntax.IsSPFRecord(txt) {
 			t.Fatalf("parsed a record without the v=spf1 version: %q", txt)
 		}
-		for _, d := range rec.directives {
-			if !strings.Contains("+-~?", string(d.qualifier)) || d.cidr4 < 0 || d.cidr4 > 32 || d.cidr6 < 0 || d.cidr6 > 128 {
+		for _, d := range rec.Directives {
+			if !strings.Contains("+-~?", string(d.Qualifier)) || d.CIDR4 < 0 || d.CIDR4 > 32 || d.CIDR6 < 0 || d.CIDR6 > 128 {
 				t.Fatalf("bad directive %+v in %q", d, txt)
 			}
-			switch d.name {
+			switch d.Name {
 			case "all", "include", "a", "mx", "ptr", "exists":
 			case "ip4", "ip6":
-				if !d.prefix.IsValid() {
-					t.Fatalf("invalid network in %q", d.text)
+				if !d.Prefix.IsValid() {
+					t.Fatalf("invalid network in %q", d.Text)
 				}
 			default:
-				t.Fatalf("unknown mechanism %q parsed", d.name)
+				t.Fatalf("unknown mechanism %q parsed", d.Name)
 			}
 		}
 		z := zone("192.0.2.1 PTR host.example.com", "host.example.com A 192.0.2.1")
-		z.txt["example.com"] = []string{txt}
+		z.TXT["example.com"] = []string{txt}
 		if got := mailFrom(z, "192.0.2.1", "user@example.com"); !results[got.Result] {
 			t.Fatalf("result %q for %q", got.Result, txt)
 		}
@@ -66,13 +68,13 @@ func FuzzExpandMacros(f *testing.F) {
 		}
 		z := zone("192.0.2.3 PTR mx.example.org", "mx.example.org A 192.0.2.3")
 		e := newEvaluator(context.Background(), ip, "email.example.com", local+"@email.example.com", local, opts(z))
-		if toks, err := checkDomainSpec(spec); err == nil {
+		if toks, err := syntax.CheckDomainSpec(spec); err == nil {
 			name, ok, exc := e.target(toks, "email.example.com", true)
 			if exc == nil && ok && (len(name) > 253 || !validDomain(name)) {
 				t.Fatalf("target %q from %q is not a valid domain", name, spec)
 			}
 		}
-		if toks, err := parseMacroString(spec, true); err == nil {
+		if toks, err := syntax.ParseMacroString(spec, true); err == nil {
 			s, exc := e.expand(toks, "email.example.com", false)
 			if exc != nil || len(s) > maxExpansion+3*(len(local)+len(spec)+300) {
 				t.Fatalf("explanation expansion of %q: %d bytes, %v", spec, len(s), exc)
@@ -100,7 +102,7 @@ func FuzzCheckHost(f *testing.F) {
 			"example.com MX host.example.com",
 			"192.0.2.1 PTR host.example.com",
 		)
-		z.txt["example.com"] = []string{txt}
+		z.TXT["example.com"] = []string{txt}
 		got := CheckMailFrom(context.Background(), addr, sender, "mail.example.net", opts(z))
 		if !results[got.Result] {
 			t.Fatalf("result %q", got.Result)

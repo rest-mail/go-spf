@@ -1,9 +1,12 @@
-package spf
+package rfctest
 
 import (
 	"context"
 	"strings"
 	"testing"
+
+	"github.com/rest-mail/go-spf/pkg/spf"
+	"github.com/rest-mail/go-spf/pkg/spf/internal/dnstest"
 )
 
 // The examples of RFC 7208 Appendix A, and cases equivalent to the
@@ -11,7 +14,7 @@ import (
 
 // appendixA is the DNS setup Appendix A's examples are based on. The CNAME of
 // www.example.com is flattened into its addresses.
-func appendixA(extra ...string) *fakeDNS {
+func appendixA(extra ...string) *dnstest.Zone {
 	return zone(append([]string{
 		"example.com MX mail-a.example.com",
 		"example.com MX mail-b.example.com",
@@ -63,9 +66,9 @@ func TestAppendixA1(t *testing.T) {
 			pass[ip] = true
 		}
 		for _, ip := range hosts {
-			res := ResultFail
+			res := spf.ResultFail
 			if pass[ip] {
-				res = ResultPass
+				res = spf.ResultPass
 			}
 			want(t, c.record+" from "+ip, mailFrom(z, ip, "user@example.com"), res)
 		}
@@ -88,9 +91,9 @@ func TestAppendixA2(t *testing.T) {
 		"example.net TXT v=spf1 ip4:198.51.100.0/24 -all",
 	)
 	for _, d := range []string{"example.org", "la.example.org", "ny.example.org", "sf.example.org"} {
-		want(t, d+" via example.com", mailFrom(z, "192.0.2.10", "user@"+d), ResultPass)
-		want(t, d+" via example.net", mailFrom(z, "198.51.100.7", "user@"+d), ResultPass)
-		want(t, d+" elsewhere", mailFrom(z, "203.0.113.1", "user@"+d), ResultFail)
+		want(t, d+" via example.com", mailFrom(z, "192.0.2.10", "user@"+d), spf.ResultPass)
+		want(t, d+" via example.net", mailFrom(z, "198.51.100.7", "user@"+d), spf.ResultPass)
+		want(t, d+" elsewhere", mailFrom(z, "203.0.113.1", "user@"+d), spf.ResultFail)
 	}
 }
 
@@ -111,17 +114,17 @@ func TestAppendixA3(t *testing.T) {
 	)
 	cases := []struct {
 		ip, sender string
-		want       Result
+		want       spf.Result
 	}{
-		{"203.0.113.9", "mary@example.com", ResultPass},
-		{"203.0.113.9", "fred@example.com", ResultPass},
-		{"203.0.113.9", "mary+lists@example.com", ResultPass},
-		{"192.168.15.15", "joel@example.com", ResultPass},
-		{"192.168.15.16", "joel@example.com", ResultPass},
-		{"192.168.15.17", "joel@example.com", ResultFail},
-		{"203.0.113.9", "joel@example.com", ResultFail},
-		{"203.0.113.9", "bob@example.com", ResultFail},
-		{"192.0.2.129", "bob@example.com", ResultPass},
+		{"203.0.113.9", "mary@example.com", spf.ResultPass},
+		{"203.0.113.9", "fred@example.com", spf.ResultPass},
+		{"203.0.113.9", "mary+lists@example.com", spf.ResultPass},
+		{"192.168.15.15", "joel@example.com", spf.ResultPass},
+		{"192.168.15.16", "joel@example.com", spf.ResultPass},
+		{"192.168.15.17", "joel@example.com", spf.ResultFail},
+		{"203.0.113.9", "joel@example.com", spf.ResultFail},
+		{"203.0.113.9", "bob@example.com", spf.ResultFail},
+		{"192.0.2.129", "bob@example.com", spf.ResultPass},
 	}
 	for _, c := range cases {
 		want(t, c.sender+" from "+c.ip, mailFrom(z, c.ip, c.sender), c.want)
@@ -142,13 +145,13 @@ func TestAppendixA4(t *testing.T) {
 	}
 	asPrinted := appendixA(append(records, "ptr._spf.example.com TXT v=spf1 -ptr +all")...)
 	corrected := appendixA(append(records, "ptr._spf.example.com TXT v=spf1 -ptr:example.com +all")...)
-	for ip, res := range map[string]Result{
-		"192.0.2.65":  ResultPass, // in range, reverse DNS in example.com
-		"192.0.2.140": ResultFail, // in range, reverse DNS in example.org
-		"192.0.2.200": ResultFail, // in range, no reverse DNS
-		"10.0.0.4":    ResultFail, // out of range
+	for ip, res := range map[string]spf.Result{
+		"192.0.2.65":  spf.ResultPass, // in range, reverse DNS in example.com
+		"192.0.2.140": spf.ResultFail, // in range, reverse DNS in example.org
+		"192.0.2.200": spf.ResultFail, // in range, no reverse DNS
+		"10.0.0.4":    spf.ResultFail, // out of range
 	} {
-		want(t, "as printed, "+ip, mailFrom(asPrinted, ip, "user@example.com"), ResultFail)
+		want(t, "as printed, "+ip, mailFrom(asPrinted, ip, "user@example.com"), spf.ResultFail)
 		want(t, "corrected, "+ip, mailFrom(corrected, ip, "user@example.com"), res)
 	}
 }
@@ -253,71 +256,71 @@ func TestOpenSPFEquivalents(t *testing.T) {
 	)
 	cases := []struct {
 		section, name, ip, sender string
-		want                      Result
+		want                      spf.Result
 	}{
-		{"initial processing", "long label", "192.0.2.1", "a@" + strings.Repeat("t", 64) + ".toolong.example", ResultNone},
-		{"initial processing", "empty label", "192.0.2.1", "a@a..emptylabel.example", ResultNone},
-		{"initial processing", "DNS error", "192.0.2.1", "a@hosterror.example", ResultTempError},
-		{"initial processing", "no local part", "192.0.2.1", "@pass.example", ResultPass},
-		{"record lookup", "NXDOMAIN", "192.0.2.1", "a@nowhere.example", ResultNone},
-		{"selecting records", "no space after version", "192.0.2.1", "a@nospace1.example", ResultNone},
-		{"selecting records", "equals after version", "192.0.2.1", "a@nospace2.example", ResultNone},
-		{"selecting records", "spf2 ignored", "192.0.2.1", "a@spf2.example", ResultFail},
-		{"selecting records", "two v=spf1", "192.0.2.1", "a@twospf.example", ResultPermError},
-		{"selecting records", "case", "192.0.2.1", "a@case.example", ResultPass},
-		{"record evaluation", "extra spaces", "192.0.2.1", "a@spaces.example", ResultPass},
-		{"record evaluation", "= in a domain-spec", "192.0.2.1", "a@detect-modifier.example", ResultPass},
-		{"record evaluation", "default neutral", "192.0.2.1", "a@default.example", ResultNeutral},
-		{"record evaluation", "redirect after all", "192.0.2.1", "a@redirect-after-all.example", ResultFail},
-		{"record evaluation", "modifier without name", "192.0.2.1", "a@badmod.example", ResultPermError},
-		{"record evaluation", "modifier name starts with digit", "192.0.2.1", "a@numname.example", ResultPermError},
-		{"all", "argument", "192.0.2.1", "a@all-arg.example", ResultPermError},
-		{"all", "CIDR", "192.0.2.1", "a@all-cidr.example", ResultPermError},
-		{"all", "neutral", "192.0.2.1", "a@all-neutral.example", ResultNeutral},
-		{"ptr", "CIDR", "192.0.2.1", "a@ptr-cidr.example", ResultPermError},
-		{"ptr", "empty domain", "192.0.2.1", "a@ptr-empty.example", ResultPermError},
-		{"ptr", "match", "192.0.2.1", "a@ptr-match.example", ResultPass},
-		{"ptr", "no match", "192.0.2.2", "a@ptr-match.example", ResultFail},
-		{"a", "port", "192.0.2.1", "a@a-colon.example", ResultPermError},
-		{"a", "dual CIDR v4", "192.0.2.9", "a@a-dual-cidr.example", ResultPass},
-		{"a", "dual CIDR v6", "2001:db8::1", "a@a-dual-cidr.example", ResultFail},
-		{"a", "numeric top label", "192.0.2.1", "a@a-numeric-top.example", ResultPermError},
-		{"a", "dash at end of top label", "192.0.2.1", "a@a-dash-top.example", ResultPermError},
-		{"a", "only a top label", "192.0.2.1", "a@a-only-top.example", ResultPermError},
-		{"a", "IPv4 CIDR too long", "192.0.2.1", "a@a-bad-cidr4.example", ResultPermError},
-		{"a", "IPv6 CIDR too long", "192.0.2.1", "a@a-bad-cidr6.example", ResultPermError},
-		{"a", "several addresses", "192.0.2.1", "a@a-multi-ip.example", ResultPass},
-		{"include", "target without SPF", "192.0.2.1", "a@include-none.example", ResultPermError},
-		{"include", "softfail does not match", "192.0.2.1", "a@include-softfail.example", ResultNeutral},
-		{"include", "empty domain", "192.0.2.1", "a@include-empty.example", ResultPermError},
-		{"include", "CIDR", "192.0.2.1", "a@include-cidr.example", ResultPermError},
-		{"mx", "empty domain", "192.0.2.1", "a@mx-empty.example", ResultPermError},
-		{"mx", "no implicit MX", "192.0.2.1", "a@mx-implicit.example", ResultFail},
-		{"mx", "second MX, first without address", "192.0.2.1", "a@mx-multi.example", ResultPass},
-		{"exists", "empty domain", "192.0.2.1", "a@exists-empty.example", ResultPermError},
-		{"exists", "CIDR", "192.0.2.1", "a@exists-cidr.example", ResultPermError},
-		{"exists", "AAAA does not count", "2001:db8::1", "a@exists-v6.example", ResultFail},
-		{"ip4", "no address", "192.0.2.1", "a@ip4-noaddr.example", ResultPermError},
-		{"ip4", "short address", "192.0.2.1", "a@ip4-short.example", ResultPermError},
-		{"ip6", "IPv4-mapped network vs IPv4", "192.0.2.1", "a@ip4-mapped.example", ResultFail},
-		{"ip6", "::/0 vs IPv4", "192.0.2.1", "a@ip6-v4.example", ResultFail},
-		{"ip6", "CIDR too long", "2001:db8::1", "a@ip6-bad.example", ResultPermError},
-		{"exp", "fail", "192.0.2.1", "a@exp-fail.example", ResultFail},
-		{"exp", "twice", "192.0.2.1", "a@exp-twice.example", ResultPermError},
-		{"exp", "syntax error in exp=", "192.0.2.1", "a@exp-syntax.example", ResultPermError},
-		{"redirect", "target without SPF", "192.0.2.1", "a@redirect-none.example", ResultPermError},
-		{"redirect", "exp of the original dropped", "192.0.2.1", "a@redirect-cancels-exp.example", ResultFail},
-		{"modifiers", "unknown modifier", "192.0.2.1", "a@unknown-mod.example", ResultFail},
-		{"macros", "bad percent", "192.0.2.1", "a@macro-bad.example", ResultPermError},
-		{"macros", "reverse local-part", "192.0.2.1", "a-b@macro-lr.example", ResultPass},
-		{"macros", "IPv6 reverse", "2001:db8::1", "a@macro-v6.example", ResultPass},
-		{"macros", "exp-only letter", "192.0.2.1", "a@macro-exp-only.example", ResultPermError},
-		{"macros", "include target without a record", "192.0.2.1", "a@macro-trailing.example", ResultPermError},
-		{"limits", "three void lookups", "192.0.2.1", "a@void3.example", ResultPermError},
-		{"limits", "include loop", "192.0.2.1", "a@include-loop.example", ResultPermError},
+		{"initial processing", "long label", "192.0.2.1", "a@" + strings.Repeat("t", 64) + ".toolong.example", spf.ResultNone},
+		{"initial processing", "empty label", "192.0.2.1", "a@a..emptylabel.example", spf.ResultNone},
+		{"initial processing", "DNS error", "192.0.2.1", "a@hosterror.example", spf.ResultTempError},
+		{"initial processing", "no local part", "192.0.2.1", "@pass.example", spf.ResultPass},
+		{"record lookup", "NXDOMAIN", "192.0.2.1", "a@nowhere.example", spf.ResultNone},
+		{"selecting records", "no space after version", "192.0.2.1", "a@nospace1.example", spf.ResultNone},
+		{"selecting records", "equals after version", "192.0.2.1", "a@nospace2.example", spf.ResultNone},
+		{"selecting records", "spf2 ignored", "192.0.2.1", "a@spf2.example", spf.ResultFail},
+		{"selecting records", "two v=spf1", "192.0.2.1", "a@twospf.example", spf.ResultPermError},
+		{"selecting records", "case", "192.0.2.1", "a@case.example", spf.ResultPass},
+		{"record evaluation", "extra spaces", "192.0.2.1", "a@spaces.example", spf.ResultPass},
+		{"record evaluation", "= in a domain-spec", "192.0.2.1", "a@detect-modifier.example", spf.ResultPass},
+		{"record evaluation", "default neutral", "192.0.2.1", "a@default.example", spf.ResultNeutral},
+		{"record evaluation", "redirect after all", "192.0.2.1", "a@redirect-after-all.example", spf.ResultFail},
+		{"record evaluation", "modifier without name", "192.0.2.1", "a@badmod.example", spf.ResultPermError},
+		{"record evaluation", "modifier name starts with digit", "192.0.2.1", "a@numname.example", spf.ResultPermError},
+		{"all", "argument", "192.0.2.1", "a@all-arg.example", spf.ResultPermError},
+		{"all", "CIDR", "192.0.2.1", "a@all-cidr.example", spf.ResultPermError},
+		{"all", "neutral", "192.0.2.1", "a@all-neutral.example", spf.ResultNeutral},
+		{"ptr", "CIDR", "192.0.2.1", "a@ptr-cidr.example", spf.ResultPermError},
+		{"ptr", "empty domain", "192.0.2.1", "a@ptr-empty.example", spf.ResultPermError},
+		{"ptr", "match", "192.0.2.1", "a@ptr-match.example", spf.ResultPass},
+		{"ptr", "no match", "192.0.2.2", "a@ptr-match.example", spf.ResultFail},
+		{"a", "port", "192.0.2.1", "a@a-colon.example", spf.ResultPermError},
+		{"a", "dual CIDR v4", "192.0.2.9", "a@a-dual-cidr.example", spf.ResultPass},
+		{"a", "dual CIDR v6", "2001:db8::1", "a@a-dual-cidr.example", spf.ResultFail},
+		{"a", "numeric top label", "192.0.2.1", "a@a-numeric-top.example", spf.ResultPermError},
+		{"a", "dash at end of top label", "192.0.2.1", "a@a-dash-top.example", spf.ResultPermError},
+		{"a", "only a top label", "192.0.2.1", "a@a-only-top.example", spf.ResultPermError},
+		{"a", "IPv4 CIDR too long", "192.0.2.1", "a@a-bad-cidr4.example", spf.ResultPermError},
+		{"a", "IPv6 CIDR too long", "192.0.2.1", "a@a-bad-cidr6.example", spf.ResultPermError},
+		{"a", "several addresses", "192.0.2.1", "a@a-multi-ip.example", spf.ResultPass},
+		{"include", "target without SPF", "192.0.2.1", "a@include-none.example", spf.ResultPermError},
+		{"include", "softfail does not match", "192.0.2.1", "a@include-softfail.example", spf.ResultNeutral},
+		{"include", "empty domain", "192.0.2.1", "a@include-empty.example", spf.ResultPermError},
+		{"include", "CIDR", "192.0.2.1", "a@include-cidr.example", spf.ResultPermError},
+		{"mx", "empty domain", "192.0.2.1", "a@mx-empty.example", spf.ResultPermError},
+		{"mx", "no implicit MX", "192.0.2.1", "a@mx-implicit.example", spf.ResultFail},
+		{"mx", "second MX, first without address", "192.0.2.1", "a@mx-multi.example", spf.ResultPass},
+		{"exists", "empty domain", "192.0.2.1", "a@exists-empty.example", spf.ResultPermError},
+		{"exists", "CIDR", "192.0.2.1", "a@exists-cidr.example", spf.ResultPermError},
+		{"exists", "AAAA does not count", "2001:db8::1", "a@exists-v6.example", spf.ResultFail},
+		{"ip4", "no address", "192.0.2.1", "a@ip4-noaddr.example", spf.ResultPermError},
+		{"ip4", "short address", "192.0.2.1", "a@ip4-short.example", spf.ResultPermError},
+		{"ip6", "IPv4-mapped network vs IPv4", "192.0.2.1", "a@ip4-mapped.example", spf.ResultFail},
+		{"ip6", "::/0 vs IPv4", "192.0.2.1", "a@ip6-v4.example", spf.ResultFail},
+		{"ip6", "CIDR too long", "2001:db8::1", "a@ip6-bad.example", spf.ResultPermError},
+		{"exp", "fail", "192.0.2.1", "a@exp-fail.example", spf.ResultFail},
+		{"exp", "twice", "192.0.2.1", "a@exp-twice.example", spf.ResultPermError},
+		{"exp", "syntax error in exp=", "192.0.2.1", "a@exp-syntax.example", spf.ResultPermError},
+		{"redirect", "target without SPF", "192.0.2.1", "a@redirect-none.example", spf.ResultPermError},
+		{"redirect", "exp of the original dropped", "192.0.2.1", "a@redirect-cancels-exp.example", spf.ResultFail},
+		{"modifiers", "unknown modifier", "192.0.2.1", "a@unknown-mod.example", spf.ResultFail},
+		{"macros", "bad percent", "192.0.2.1", "a@macro-bad.example", spf.ResultPermError},
+		{"macros", "reverse local-part", "192.0.2.1", "a-b@macro-lr.example", spf.ResultPass},
+		{"macros", "IPv6 reverse", "2001:db8::1", "a@macro-v6.example", spf.ResultPass},
+		{"macros", "exp-only letter", "192.0.2.1", "a@macro-exp-only.example", spf.ResultPermError},
+		{"macros", "include target without a record", "192.0.2.1", "a@macro-trailing.example", spf.ResultPermError},
+		{"limits", "three void lookups", "192.0.2.1", "a@void3.example", spf.ResultPermError},
+		{"limits", "include loop", "192.0.2.1", "a@include-loop.example", spf.ResultPermError},
 	}
 	for _, c := range cases {
-		got := CheckMailFrom(context.Background(), mustAddr(c.ip), c.sender, testHELO, opts(z))
+		got := spf.CheckMailFrom(context.Background(), mustAddr(c.ip), c.sender, testHELO, opts(z))
 		want(t, c.section+": "+c.name, got, c.want)
 	}
 	if got := mailFrom(z, "192.0.2.1", "a@exp-fail.example"); got.Explanation != "192.0.2.1 is not allowed for exp-fail.example" {

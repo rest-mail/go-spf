@@ -6,6 +6,40 @@ module tags of the form `vMAJOR.MINOR.PATCH`.
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-26
+
+### Changed (breaking)
+
+- The library moves out of the module root into packages. The module path is
+  unchanged (`github.com/rest-mail/go-spf`), but the root package is gone:
+  - `github.com/rest-mail/go-spf/pkg/spf` holds the whole public API:
+    `CheckMailFrom`, `CheckHELO`, `CheckHost`, `Result` and its seven values,
+    `Response`, `Resolver`, `Options` and `DefaultTimeout`.
+  - `pkg/spf/internal/syntax` (the record and macro-string grammar),
+    `pkg/spf/internal/idna` (the RFC 8616 A-label conversion) and
+    `pkg/spf/internal/dnstest` (the tests' in-memory DNS zone) are internal,
+    so they are not importable.
+- No exported name changes, and every check answers as it did in v0.1.2.
+
+Migration: replace the import path.
+
+| Before (v0.1) | After (v0.2) |
+|---------------|--------------|
+| `import "github.com/rest-mail/go-spf"` | `import "github.com/rest-mail/go-spf/pkg/spf"` |
+| `spf.CheckMailFrom`, `spf.CheckHELO`, `spf.CheckHost`, `spf.Result`, `spf.Result*`, `spf.Response`, `spf.Resolver`, `spf.Options`, `spf.DefaultTimeout` | unchanged, now from `.../pkg/spf` |
+
+### Changed
+
+- The RFC tests that need only the public API move to a black-box suite,
+  `pkg/spf/rfctest`. Tests that need the evaluator's internals stay beside it
+  in `pkg/spf`. Every test, fuzz target and example is kept.
+- The reusable RFC verification workflow measures coverage with `-coverpkg`
+  over the packages it tests, so a black-box suite counts toward the packages
+  it exercises. Its fixtures check that every checklist directory and fuzz
+  target the caller names exists.
+
+## [0.1.2] - 2026-10-23
+
 ### Fixed
 
 - A U-label that IDNA2008 cannot allow is no longer converted and looked up

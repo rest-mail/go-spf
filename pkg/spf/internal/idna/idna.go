@@ -1,4 +1,4 @@
-package spf
+package idna
 
 import (
 	"math"
@@ -7,7 +7,7 @@ import (
 	"unicode/utf8"
 )
 
-// toALabels converts every U-label of domain to its A-label (xn-- punycode)
+// ToALabels converts every U-label of domain to its A-label (xn-- punycode)
 // form, as RFC 8616 §4 requires before a name from an internationalized MAIL
 // FROM is used for SPF, both for the record lookup and for the macros that
 // carry it (%{d}, %{o}, %{s}). An all-ASCII label is returned as it is; a
@@ -21,7 +21,7 @@ import (
 // normalization, special folds such as ß, the per-code-point tables) is out of
 // scope for a dependency-free evaluator; only deliberately unusual spellings
 // differ.
-func toALabels(domain string) string {
+func ToALabels(domain string) string {
 	if isASCII(domain) || !utf8.ValidString(domain) {
 		return domain
 	}
