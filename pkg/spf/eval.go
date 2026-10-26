@@ -8,6 +8,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/rest-mail/go-spf/pkg/spf/internal/syntax"
 )
 
 // RFC 7208 §4.6.4 processing limits.
@@ -33,9 +35,9 @@ const (
 type outcome struct {
 	result    Result
 	reason    string
-	mechanism string       // the deciding directive, or "default"
-	exp       []macroToken // exp= of the record whose mechanism gave fail
-	domain    string       // that record's <domain>, for its macros
+	mechanism string              // the deciding directive, or "default"
+	exp       []syntax.MacroToken // exp= of the record whose mechanism gave fail
+	domain    string              // that record's <domain>, for its macros
 }
 
 func fail(result Result, reason string) outcome { return outcome{result: result, reason: reason} }
@@ -111,7 +113,7 @@ func (e *evaluator) checkHost(domain string) outcome {
 	}
 	var spf []string
 	for _, t := range txts {
-		if isSPFRecord(t) {
+		if syntax.IsSPFRecord(t) {
 			spf = append(spf, t)
 		}
 	}
@@ -122,7 +124,7 @@ func (e *evaluator) checkHost(domain string) outcome {
 	default:
 		return fail(ResultPermError, domain+" publishes more than one SPF record")
 	}
-	rec, err := parseRecord(spf[0])
+	rec, err := syntax.ParseRecord(spf[0])
 	if err != nil {
 		return fail(ResultPermError, "SPF record of "+domain+": "+err.Error())
 	}
@@ -133,28 +135,28 @@ func (e *evaluator) checkHost(domain string) outcome {
 // redirect modifier if none matched (§6.1), else the default neutral (§4.7).
 // A record with an "all" mechanism never reaches redirect: "all" always
 // matches, which is what §5.1 and §6.1 require.
-func (e *evaluator) evaluate(domain string, rec *record) outcome {
-	for i := range rec.directives {
-		d := &rec.directives[i]
+func (e *evaluator) evaluate(domain string, rec *syntax.Record) outcome {
+	for i := range rec.Directives {
+		d := &rec.Directives[i]
 		matched, exc := e.match(domain, d)
 		if exc != nil {
 			return *exc
 		}
 		if matched {
-			o := outcome{result: qualifierResult(d.qualifier), mechanism: d.text, reason: "matched " + d.text}
+			o := outcome{result: qualifierResult(d.Qualifier), mechanism: d.Text, reason: "matched " + d.Text}
 			if o.result == ResultFail {
-				o.exp, o.domain = rec.exp, domain
+				o.exp, o.domain = rec.Exp, domain
 			}
 			return o
 		}
 	}
-	if rec.redirect == nil {
+	if rec.Redirect == nil {
 		return outcome{result: ResultNeutral, mechanism: "default", reason: "no mechanism matched"}
 	}
 	if exc := e.countLookup(); exc != nil {
 		return *exc
 	}
-	target, ok, exc := e.target(rec.redirect, domain, true)
+	target, ok, exc := e.target(rec.Redirect, domain, true)
 	if exc != nil {
 		return *exc
 	}
@@ -170,21 +172,21 @@ func (e *evaluator) evaluate(domain string, rec *record) outcome {
 
 // match evaluates one mechanism. It returns whether it matched, or a non-nil
 // outcome for an exception (temperror or permerror) that ends evaluation.
-func (e *evaluator) match(domain string, d *directive) (bool, *outcome) {
-	switch d.name {
+func (e *evaluator) match(domain string, d *syntax.Directive) (bool, *outcome) {
+	switch d.Name {
 	case "all":
 		return true, nil
 	case "ip4", "ip6":
-		return d.prefix.Contains(e.ip), nil
+		return d.Prefix.Contains(e.ip), nil
 	}
 	if exc := e.countLookup(); exc != nil {
 		return false, exc
 	}
-	target, ok, exc := e.target(d.spec, domain, true)
+	target, ok, exc := e.target(d.Spec, domain, true)
 	if exc != nil {
 		return false, exc
 	}
-	switch d.name {
+	switch d.Name {
 	case "include":
 		return e.matchInclude(target, ok)
 	case "ptr":
@@ -195,7 +197,7 @@ func (e *evaluator) match(domain string, d *directive) (bool, *outcome) {
 		// treated as a name that does not exist, so as a void lookup.
 		return false, e.countVoid()
 	}
-	switch d.name {
+	switch d.Name {
 	case "a":
 		addrs, exc := e.lookupAddrs(target, e.network)
 		return e.anyMatch(addrs, d), exc
@@ -230,7 +232,7 @@ func (e *evaluator) matchInclude(target string, ok bool) (bool, *outcome) {
 // matchMX evaluates mx (§5.4): the address records of each MX name, with no
 // fallback to the target's own addresses when it has no MX (§5.4) and at most
 // maxMXNames names (§4.6.4).
-func (e *evaluator) matchMX(target string, d *directive) (bool, *outcome) {
+func (e *evaluator) matchMX(target string, d *syntax.Directive) (bool, *outcome) {
 	if err := e.ctx.Err(); err != nil {
 		return false, timedOut(err)
 	}
@@ -340,10 +342,10 @@ func (e *evaluator) validatedName(domain string) string {
 
 // anyMatch reports whether ip is in the network of any of addrs under d's
 // prefix lengths (§5).
-func (e *evaluator) anyMatch(addrs []netip.Addr, d *directive) bool {
-	bits := d.cidr4
+func (e *evaluator) anyMatch(addrs []netip.Addr, d *syntax.Directive) bool {
+	bits := d.CIDR4
 	if e.network == "ip6" {
-		bits = d.cidr6
+		bits = d.CIDR6
 	}
 	for _, a := range addrs {
 		if p, err := a.Unmap().Prefix(bits); err == nil && p.Contains(e.ip) {
@@ -406,7 +408,7 @@ func (e *evaluator) countVoid() *outcome {
 // when spec is absent, else the expansion with one trailing dot dropped and
 // cut from the left to 253 characters (§7.3). ok is false when the result is
 // not a valid domain name.
-func (e *evaluator) target(spec []macroToken, domain string, counted bool) (name string, ok bool, exc *outcome) {
+func (e *evaluator) target(spec []syntax.MacroToken, domain string, counted bool) (name string, ok bool, exc *outcome) {
 	if spec == nil {
 		return domain, true, nil
 	}
@@ -429,18 +431,18 @@ func (e *evaluator) target(spec []macroToken, domain string, counted bool) (name
 // says whether a %{p} lookup is charged against the DNS-query limit, as it is
 // for terms but not for the explanation (§4.6.4). The result stops growing
 // once it is longer than maxExpansion.
-func (e *evaluator) expand(toks []macroToken, domain string, counted bool) (string, *outcome) {
+func (e *evaluator) expand(toks []syntax.MacroToken, domain string, counted bool) (string, *outcome) {
 	var b strings.Builder
 	for _, t := range toks {
 		if b.Len() > maxExpansion {
 			break
 		}
-		if t.letter == 0 {
-			b.WriteString(t.lit)
+		if t.Letter == 0 {
+			b.WriteString(t.Lit)
 			continue
 		}
 		var v string
-		switch t.letter {
+		switch t.Letter {
 		case 's':
 			v = e.sender
 		case 'l':
@@ -472,9 +474,9 @@ func (e *evaluator) expand(toks []macroToken, domain string, counted bool) (stri
 		default: // 't'
 			v = strconv.FormatInt(e.now().Unix(), 10)
 		}
-		v = t.transform(v)
-		if t.urlEsc {
-			v = urlEscape(v)
+		v = t.Transform(v)
+		if t.URLEsc {
+			v = syntax.URLEscape(v)
 		}
 		b.WriteString(v)
 	}
@@ -485,7 +487,7 @@ func (e *evaluator) expand(toks []macroToken, domain string, counted bool) (stri
 // problem fetching or parsing it gives an empty explanation, as if the record
 // had no exp= modifier. The text is limited to printable US-ASCII and to
 // maxExplanation characters.
-func (e *evaluator) explain(spec []macroToken, domain string) string {
+func (e *evaluator) explain(spec []syntax.MacroToken, domain string) string {
 	target, ok, exc := e.target(spec, domain, false)
 	if exc != nil || !ok {
 		return ""
@@ -494,7 +496,7 @@ func (e *evaluator) explain(spec []macroToken, domain string) string {
 	if err != nil || len(txts) != 1 {
 		return ""
 	}
-	toks, err := parseMacroString(txts[0], true)
+	toks, err := syntax.ParseMacroString(txts[0], true)
 	if err != nil {
 		return ""
 	}
@@ -530,7 +532,7 @@ func validDomain(name string) bool {
 		return false
 	}
 	labels := strings.Split(name, ".")
-	if len(labels) < 2 || !isTopLabel(labels[len(labels)-1]) {
+	if len(labels) < 2 || !syntax.IsTopLabel(labels[len(labels)-1]) {
 		return false
 	}
 	for _, l := range labels {

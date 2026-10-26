@@ -1,4 +1,4 @@
-package spf
+package rfctest
 
 import (
 	"context"
@@ -6,6 +6,8 @@ import (
 	"net/netip"
 	"strings"
 	"testing"
+
+	"github.com/rest-mail/go-spf/pkg/spf"
 )
 
 // Mechanisms (RFC 7208 §5) and the processing limits of §4.6.4.
@@ -26,24 +28,24 @@ func TestCIDRMatching(t *testing.T) {
 	)
 	cases := []struct {
 		domain, ip string
-		want       Result
+		want       spf.Result
 	}{
-		{"exact.example", "192.0.2.10", ResultPass},
-		{"exact.example", "192.0.2.11", ResultFail},
-		{"exact.example", "2001:db8::10", ResultPass},
-		{"exact.example", "2001:db8::11", ResultFail},
-		{"v4.example", "192.0.2.200", ResultPass},
-		{"v4.example", "192.0.3.10", ResultFail},
-		{"v4.example", "2001:db8::11", ResultFail},
-		{"v6.example", "2001:db8::ffff", ResultPass},
-		{"v6.example", "2001:db8:0:1::10", ResultFail},
-		{"v6.example", "192.0.2.11", ResultFail},
-		{"dual.example", "192.0.2.11", ResultPass},
-		{"dual.example", "192.0.2.12", ResultFail},
-		{"dual.example", "2001:db8::11", ResultPass},
-		{"dual.example", "2001:db8::12", ResultFail},
-		{"zero.example", "203.0.113.1", ResultPass},
-		{"zero.example", "2001:db8:ffff::1", ResultPass},
+		{"exact.example", "192.0.2.10", spf.ResultPass},
+		{"exact.example", "192.0.2.11", spf.ResultFail},
+		{"exact.example", "2001:db8::10", spf.ResultPass},
+		{"exact.example", "2001:db8::11", spf.ResultFail},
+		{"v4.example", "192.0.2.200", spf.ResultPass},
+		{"v4.example", "192.0.3.10", spf.ResultFail},
+		{"v4.example", "2001:db8::11", spf.ResultFail},
+		{"v6.example", "2001:db8::ffff", spf.ResultPass},
+		{"v6.example", "2001:db8:0:1::10", spf.ResultFail},
+		{"v6.example", "192.0.2.11", spf.ResultFail},
+		{"dual.example", "192.0.2.11", spf.ResultPass},
+		{"dual.example", "192.0.2.12", spf.ResultFail},
+		{"dual.example", "2001:db8::11", spf.ResultPass},
+		{"dual.example", "2001:db8::12", spf.ResultFail},
+		{"zero.example", "203.0.113.1", spf.ResultPass},
+		{"zero.example", "2001:db8:ffff::1", spf.ResultPass},
 	}
 	for _, c := range cases {
 		want(t, c.domain+" "+c.ip, mailFrom(z, c.ip, "a@"+c.domain), c.want)
@@ -63,19 +65,19 @@ func TestAddressFamilies(t *testing.T) {
 		"host.example A 192.0.2.10",
 		"host.example AAAA 2001:db8::10",
 	)
-	want(t, "IPv4", mailFrom(z, "192.0.2.10", "a@example.com"), ResultPass)
-	if z.count("AAAA", "") != 0 {
-		t.Errorf("IPv4 client made AAAA queries: %v", z.queries)
+	want(t, "IPv4", mailFrom(z, "192.0.2.10", "a@example.com"), spf.ResultPass)
+	if z.Count("AAAA", "") != 0 {
+		t.Errorf("IPv4 client made AAAA queries: %v", z.Queries)
 	}
-	z.queries = nil
-	want(t, "IPv6", mailFrom(z, "2001:db8::10", "a@example.com"), ResultPass)
-	if z.count("A", "") != 0 {
-		t.Errorf("IPv6 client made A queries: %v", z.queries)
+	z.Queries = nil
+	want(t, "IPv6", mailFrom(z, "2001:db8::10", "a@example.com"), spf.ResultPass)
+	if z.Count("A", "") != 0 {
+		t.Errorf("IPv6 client made A queries: %v", z.Queries)
 	}
-	want(t, "IPv4-mapped client", mailFrom(z, "::ffff:192.0.2.10", "a@example.com"), ResultPass)
-	want(t, "IPv4-mapped client, mx", mailFrom(z, "::ffff:192.0.2.20", "a@example.com"), ResultPass)
-	z.mapV4 = true
-	want(t, "IPv4-mapped answers", mailFrom(z, "192.0.2.20", "a@example.com"), ResultPass)
+	want(t, "IPv4-mapped client", mailFrom(z, "::ffff:192.0.2.10", "a@example.com"), spf.ResultPass)
+	want(t, "IPv4-mapped client, mx", mailFrom(z, "::ffff:192.0.2.20", "a@example.com"), spf.ResultPass)
+	z.MapV4 = true
+	want(t, "IPv4-mapped answers", mailFrom(z, "192.0.2.20", "a@example.com"), spf.ResultPass)
 }
 
 // TestMechanismDNSErrors checks DNS failures inside mechanisms: a server
@@ -99,16 +101,16 @@ func TestMechanismDNSErrors(t *testing.T) {
 		"good.example A 198.51.100.1",
 	)
 	for _, d := range []string{"a", "mx", "mxhost", "exists", "include"} {
-		want(t, d, mailFrom(z, "192.0.2.1", "x@"+d+".example"), ResultTempError)
+		want(t, d, mailFrom(z, "192.0.2.1", "x@"+d+".example"), spf.ResultTempError)
 	}
-	want(t, "NXDOMAIN", mailFrom(z, "192.0.2.1", "x@nx.example"), ResultPermError) // three voids
+	want(t, "NXDOMAIN", mailFrom(z, "192.0.2.1", "x@nx.example"), spf.ResultPermError) // three voids
 	z = zone(
 		"nx.example TXT v=spf1 a:nowhere.example mx:nowhere.example -all",
 		"mxs.example MX gone.example",
 		"mxgone.example TXT v=spf1 mx:mxs.example -all",
 	)
-	want(t, "two voids", mailFrom(z, "192.0.2.1", "x@nx.example"), ResultFail)
-	want(t, "MX host does not exist", mailFrom(z, "192.0.2.1", "x@mxgone.example"), ResultFail)
+	want(t, "two voids", mailFrom(z, "192.0.2.1", "x@nx.example"), spf.ResultFail)
+	want(t, "MX host does not exist", mailFrom(z, "192.0.2.1", "x@mxgone.example"), spf.ResultFail)
 }
 
 // TestAllEndsEvaluation checks that mechanisms after "all" are never
@@ -117,9 +119,9 @@ func TestMechanismDNSErrors(t *testing.T) {
 // checklist: SPF-MECH-04
 func TestAllEndsEvaluation(t *testing.T) {
 	z := zone("example.com TXT v=spf1 -all a:later.example include:later.example")
-	want(t, "all", mailFrom(z, "192.0.2.1", "a@example.com"), ResultFail)
-	if len(z.queries) != 1 {
-		t.Errorf("queries = %v, want only the record lookup", z.queries)
+	want(t, "all", mailFrom(z, "192.0.2.1", "a@example.com"), spf.ResultFail)
+	if len(z.Queries) != 1 {
+		t.Errorf("queries = %v, want only the record lookup", z.Queries)
 	}
 }
 
@@ -134,8 +136,8 @@ func TestRedirectIgnoredWithAll(t *testing.T) {
 		"v=spf1 ip4:198.51.100.1 redirect=other.example ?all",
 	} {
 		z := zone("example.com TXT "+rec, "other.example TXT v=spf1 +all")
-		want(t, rec, mailFrom(z, "192.0.2.1", "a@example.com"), ResultNeutral)
-		if z.count("TXT", "other.example") != 0 {
+		want(t, rec, mailFrom(z, "192.0.2.1", "a@example.com"), spf.ResultNeutral)
+		if z.Count("TXT", "other.example") != 0 {
 			t.Errorf("%s: the redirect was followed", rec)
 		}
 	}
@@ -158,22 +160,22 @@ func TestInclude(t *testing.T) {
 		"sender.example TXT v=spf1 exists:%{s}.%{i}.%{d}.check.test -all",
 		"a@example.com.192.0.2.1.sender.example.check.test A 127.0.0.2",
 	)
-	cases := map[string]Result{
-		"pass":      ResultFail, // -include matches
-		"fail":      ResultNeutral,
-		"softfail":  ResultNeutral,
-		"neutral":   ResultNeutral,
-		"temperror": ResultTempError,
-		"permerror": ResultPermError,
-		"none":      ResultPermError,
-		"nxdomain":  ResultPermError,
-		"sender":    ResultFail,
+	cases := map[string]spf.Result{
+		"pass":      spf.ResultFail, // -include matches
+		"fail":      spf.ResultNeutral,
+		"softfail":  spf.ResultNeutral,
+		"neutral":   spf.ResultNeutral,
+		"temperror": spf.ResultTempError,
+		"permerror": spf.ResultPermError,
+		"none":      spf.ResultPermError,
+		"nxdomain":  spf.ResultPermError,
+		"sender":    spf.ResultFail,
 	}
 	for name, res := range cases {
-		z.txt["example.com"] = []string{"v=spf1 -include:" + name + ".example ?all"}
+		z.TXT["example.com"] = []string{"v=spf1 -include:" + name + ".example ?all"}
 		got := mailFrom(z, "192.0.2.1", "a@example.com")
 		want(t, "include "+name, got, res)
-		if res == ResultFail && got.Mechanism != "-include:"+name+".example" {
+		if res == spf.ResultFail && got.Mechanism != "-include:"+name+".example" {
 			t.Errorf("include %s: Mechanism = %q", name, got.Mechanism)
 		}
 	}
@@ -191,13 +193,13 @@ func TestA(t *testing.T) {
 		"other.example A 198.51.100.1",
 		"other.example AAAA 2001:db8::1",
 	)
-	for ip, res := range map[string]Result{
-		"192.0.2.10":   ResultPass,
-		"192.0.2.11":   ResultPass,
-		"198.51.100.1": ResultPass,
-		"2001:db8::1":  ResultPass,
-		"192.0.2.12":   ResultFail,
-		"2001:db8::2":  ResultFail,
+	for ip, res := range map[string]spf.Result{
+		"192.0.2.10":   spf.ResultPass,
+		"192.0.2.11":   spf.ResultPass,
+		"198.51.100.1": spf.ResultPass,
+		"2001:db8::1":  spf.ResultPass,
+		"192.0.2.12":   spf.ResultFail,
+		"2001:db8::2":  spf.ResultFail,
 	} {
 		want(t, ip, mailFrom(z, ip, "a@example.com"), res)
 	}
@@ -220,17 +222,17 @@ func TestMX(t *testing.T) {
 		"nullmx.example TXT v=spf1 mx -all",
 		"nullmx.example MX .",
 	)
-	for ip, res := range map[string]Result{
-		"192.0.2.1":    ResultPass,
-		"192.0.2.2":    ResultPass,
-		"2001:db8::2":  ResultPass,
-		"198.51.100.7": ResultPass,
-		"198.51.100.8": ResultFail,
-		"192.0.2.3":    ResultFail,
+	for ip, res := range map[string]spf.Result{
+		"192.0.2.1":    spf.ResultPass,
+		"192.0.2.2":    spf.ResultPass,
+		"2001:db8::2":  spf.ResultPass,
+		"198.51.100.7": spf.ResultPass,
+		"198.51.100.8": spf.ResultFail,
+		"192.0.2.3":    spf.ResultFail,
 	} {
 		want(t, ip, mailFrom(z, ip, "a@example.com"), res)
 	}
-	want(t, "null MX", mailFrom(z, "192.0.2.1", "a@nullmx.example"), ResultFail)
+	want(t, "null MX", mailFrom(z, "192.0.2.1", "a@nullmx.example"), spf.ResultFail)
 }
 
 // TestMXNoImplicitMX checks that a target without MX records is not matched
@@ -242,8 +244,8 @@ func TestMXNoImplicitMX(t *testing.T) {
 		"example.com TXT v=spf1 mx -all",
 		"example.com A 192.0.2.1",
 	)
-	want(t, "no MX", mailFrom(z, "192.0.2.1", "a@example.com"), ResultFail)
-	if z.count("A", "example.com") != 0 {
+	want(t, "no MX", mailFrom(z, "192.0.2.1", "a@example.com"), spf.ResultFail)
+	if z.Count("A", "example.com") != 0 {
 		t.Error("mx looked up the target's own addresses")
 	}
 }
@@ -270,17 +272,17 @@ func TestPTR(t *testing.T) {
 		"2001:db8::65 PTR amy6.example.com",
 		"amy6.example.com AAAA 2001:db8::65",
 	)
-	for ip, res := range map[string]Result{
-		"192.0.2.65":   ResultPass, // subdomain
-		"192.0.2.10":   ResultPass, // the domain itself, case-insensitive
-		"192.0.2.140":  ResultFail, // validated, but another domain
-		"10.0.0.4":     ResultFail, // not validated
-		"192.0.2.70":   ResultFail, // a suffix that is not a subdomain
-		"2001:db8::65": ResultPass, // IPv6
+	for ip, res := range map[string]spf.Result{
+		"192.0.2.65":   spf.ResultPass, // subdomain
+		"192.0.2.10":   spf.ResultPass, // the domain itself, case-insensitive
+		"192.0.2.140":  spf.ResultFail, // validated, but another domain
+		"10.0.0.4":     spf.ResultFail, // not validated
+		"192.0.2.70":   spf.ResultFail, // a suffix that is not a subdomain
+		"2001:db8::65": spf.ResultPass, // IPv6
 	} {
 		want(t, ip, mailFrom(z, ip, "a@example.com"), res)
 	}
-	want(t, "ptr:domain", mailFrom(z, "192.0.2.65", "a@other.example"), ResultPass)
+	want(t, "ptr:domain", mailFrom(z, "192.0.2.65", "a@other.example"), spf.ResultPass)
 }
 
 // TestPTRErrors checks that a DNS error on the PTR lookup makes ptr not
@@ -297,8 +299,8 @@ func TestPTRErrors(t *testing.T) {
 		"broken.example.com SERVFAIL A",
 		"good.example.com A 192.0.2.2",
 	)
-	want(t, "PTR lookup fails", mailFrom(z, "192.0.2.1", "a@example.com"), ResultNeutral)
-	want(t, "address lookup fails", mailFrom(z, "192.0.2.2", "a@example.com"), ResultPass)
+	want(t, "PTR lookup fails", mailFrom(z, "192.0.2.1", "a@example.com"), spf.ResultNeutral)
+	want(t, "address lookup fails", mailFrom(z, "192.0.2.2", "a@example.com"), spf.ResultPass)
 }
 
 // TestIP4IP6 checks ip4 and ip6: the client is compared with the network,
@@ -310,21 +312,21 @@ func TestIP4IP6(t *testing.T) {
 		"example.com TXT v=spf1 ip4:192.0.2.1 ip4:198.51.100.0/24 ip6:2001:db8::1 ip6:2001:db8:1::/48 -all",
 		"zero.example TXT v=spf1 ip4:203.0.113.77/0 -all",
 	)
-	cases := map[string]Result{
-		"192.0.2.1":           ResultPass,
-		"192.0.2.2":           ResultFail,
-		"198.51.100.255":      ResultPass,
-		"2001:db8::1":         ResultPass,
-		"2001:db8::2":         ResultFail,
-		"2001:db8:1:ffff::1":  ResultPass,
-		"2001:db8:2::1":       ResultFail,
-		"fe80::1%eth0":        ResultFail,
-		"::ffff:198.51.100.9": ResultPass,
+	cases := map[string]spf.Result{
+		"192.0.2.1":           spf.ResultPass,
+		"192.0.2.2":           spf.ResultFail,
+		"198.51.100.255":      spf.ResultPass,
+		"2001:db8::1":         spf.ResultPass,
+		"2001:db8::2":         spf.ResultFail,
+		"2001:db8:1:ffff::1":  spf.ResultPass,
+		"2001:db8:2::1":       spf.ResultFail,
+		"fe80::1%eth0":        spf.ResultFail,
+		"::ffff:198.51.100.9": spf.ResultPass,
 	}
 	for ip, res := range cases {
 		want(t, ip, mailFrom(z, ip, "a@example.com"), res)
 	}
-	want(t, "/0", mailFrom(z, "1.2.3.4", "a@zero.example"), ResultPass)
+	want(t, "/0", mailFrom(z, "1.2.3.4", "a@zero.example"), spf.ResultPass)
 }
 
 // TestIPFamilyMismatch checks that an IPv4 client is matched only by ip4: an
@@ -337,8 +339,8 @@ func TestIPFamilyMismatch(t *testing.T) {
 		"v6.example TXT v=spf1 ip6:::/0 ip6:::ffff:0:0/96 -all",
 		"v4.example TXT v=spf1 ip4:0.0.0.0/0 -all",
 	)
-	want(t, "ip6 vs IPv4", mailFrom(z, "192.0.2.1", "a@v6.example"), ResultFail)
-	want(t, "ip4 vs IPv6", mailFrom(z, "2001:db8::1", "a@v4.example"), ResultFail)
+	want(t, "ip6 vs IPv4", mailFrom(z, "192.0.2.1", "a@v6.example"), spf.ResultFail)
+	want(t, "ip4 vs IPv6", mailFrom(z, "2001:db8::1", "a@v4.example"), spf.ResultFail)
 }
 
 // TestExists checks exists: the expanded name is looked up with an A query,
@@ -351,12 +353,12 @@ func TestExists(t *testing.T) {
 		"alice.users.example A 127.0.0.2",
 		"bob.users.example AAAA ::1",
 	)
-	want(t, "IPv4", mailFrom(z, "192.0.2.1", "alice@example.com"), ResultPass)
-	want(t, "IPv6 client", mailFrom(z, "2001:db8::1", "alice@example.com"), ResultPass)
-	want(t, "AAAA only", mailFrom(z, "2001:db8::1", "bob@example.com"), ResultFail)
-	want(t, "absent", mailFrom(z, "192.0.2.1", "carol@example.com"), ResultFail)
-	if z.count("AAAA", "") != 0 {
-		t.Errorf("exists made an AAAA query: %v", z.queries)
+	want(t, "IPv4", mailFrom(z, "192.0.2.1", "alice@example.com"), spf.ResultPass)
+	want(t, "IPv6 client", mailFrom(z, "2001:db8::1", "alice@example.com"), spf.ResultPass)
+	want(t, "AAAA only", mailFrom(z, "2001:db8::1", "bob@example.com"), spf.ResultFail)
+	want(t, "absent", mailFrom(z, "192.0.2.1", "carol@example.com"), spf.ResultFail)
+	if z.Count("AAAA", "") != 0 {
+		t.Errorf("exists made an AAAA query: %v", z.Queries)
 	}
 }
 
@@ -378,8 +380,8 @@ func TestLookupLimit(t *testing.T) {
 	}
 	for _, kind := range []string{"a", "mx", "ptr"} {
 		z := zone(append(lines, "ten.example TXT v=spf1"+terms(10, kind)+" -all", "eleven.example TXT v=spf1"+terms(11, kind)+" -all")...)
-		want(t, kind+" x10", mailFrom(z, "192.0.2.1", "a@ten.example"), ResultFail)
-		want(t, kind+" x11", mailFrom(z, "192.0.2.1", "a@eleven.example"), ResultPermError)
+		want(t, kind+" x10", mailFrom(z, "192.0.2.1", "a@ten.example"), spf.ResultFail)
+		want(t, kind+" x11", mailFrom(z, "192.0.2.1", "a@eleven.example"), spf.ResultPermError)
 	}
 	// exists either matches or is a void lookup, so it is tested as the 10th
 	// and 11th term.
@@ -387,17 +389,17 @@ func TestLookupLimit(t *testing.T) {
 		"ten.example TXT v=spf1"+terms(9, "a")+" ?exists:h0.example -all",
 		"eleven.example TXT v=spf1"+terms(10, "a")+" ?exists:h0.example -all",
 	)...)
-	want(t, "exists as 10th", mailFrom(z, "192.0.2.1", "a@ten.example"), ResultNeutral)
-	want(t, "exists as 11th", mailFrom(z, "192.0.2.1", "a@eleven.example"), ResultPermError)
+	want(t, "exists as 10th", mailFrom(z, "192.0.2.1", "a@ten.example"), spf.ResultNeutral)
+	want(t, "exists as 11th", mailFrom(z, "192.0.2.1", "a@eleven.example"), spf.ResultPermError)
 	z = zone(append(lines,
 		"r.example TXT v=spf1"+terms(9, "a")+" redirect=s.example",
 		"s.example TXT v=spf1 -all",
 		"r2.example TXT v=spf1"+terms(10, "a")+" redirect=s.example",
 		"i.example TXT v=spf1"+terms(10, "a")+" include:s.example -all",
 	)...)
-	want(t, "9 + redirect", mailFrom(z, "192.0.2.1", "a@r.example"), ResultFail)
-	want(t, "10 + redirect", mailFrom(z, "192.0.2.1", "a@r2.example"), ResultPermError)
-	want(t, "10 + include", mailFrom(z, "192.0.2.1", "a@i.example"), ResultPermError)
+	want(t, "9 + redirect", mailFrom(z, "192.0.2.1", "a@r.example"), spf.ResultFail)
+	want(t, "10 + redirect", mailFrom(z, "192.0.2.1", "a@r2.example"), spf.ResultPermError)
+	want(t, "10 + include", mailFrom(z, "192.0.2.1", "a@i.example"), spf.ResultPermError)
 }
 
 // TestLookupLimitIgnoresNonDNSTerms checks that all, ip4, ip6 and exp do not
@@ -415,7 +417,7 @@ func TestLookupLimitIgnoresNonDNSTerms(t *testing.T) {
 		"explain.example TXT denied",
 	)
 	got := mailFrom(z, "192.0.2.1", "a@example.com")
-	want(t, "10 a, 20 ip, exp", got, ResultFail)
+	want(t, "10 a, 20 ip, exp", got, spf.ResultFail)
 	if got.Explanation != "denied" {
 		t.Errorf("Explanation = %q", got.Explanation)
 	}
@@ -436,9 +438,9 @@ func TestLookupLimitAcrossRecursion(t *testing.T) {
 		"ping.example TXT v=spf1 redirect=pong.example",
 		"pong.example TXT v=spf1 redirect=ping.example",
 	)
-	want(t, "12 terms across records", mailFrom(z, "192.0.2.1", "a@example.com"), ResultPermError)
-	want(t, "include loop", mailFrom(z, "192.0.2.1", "a@loop.example"), ResultPermError)
-	want(t, "redirect loop", mailFrom(z, "192.0.2.1", "a@ping.example"), ResultPermError)
+	want(t, "12 terms across records", mailFrom(z, "192.0.2.1", "a@example.com"), spf.ResultPermError)
+	want(t, "include loop", mailFrom(z, "192.0.2.1", "a@loop.example"), spf.ResultPermError)
+	want(t, "redirect loop", mailFrom(z, "192.0.2.1", "a@ping.example"), spf.ResultPermError)
 }
 
 // TestMXNameLimit checks that an mx term whose target lists more than 10 MX
@@ -454,30 +456,8 @@ func TestMXNameLimit(t *testing.T) {
 		lines = append(lines, fmt.Sprintf("eleven.mx MX m%d.example", i), fmt.Sprintf("m%d.example A 192.0.2.%d", i, i+1))
 	}
 	z := zone(lines...)
-	want(t, "10 MX names", mailFrom(z, "192.0.2.10", "a@ten.example"), ResultPass)
-	want(t, "11 MX names", mailFrom(z, "192.0.2.1", "a@eleven.example"), ResultPermError)
-}
-
-// TestPTRNameLimit checks that only the first 10 PTR names are considered:
-// a matching 11th name is ignored, by ptr and by %{p}.
-//
-// checklist: SPF-LIMIT-05
-func TestPTRNameLimit(t *testing.T) {
-	lines := []string{
-		"example.com TXT v=spf1 ptr -all",
-	}
-	for i := 0; i < 10; i++ {
-		lines = append(lines, fmt.Sprintf("192.0.2.1 PTR h%d.other.example", i), fmt.Sprintf("h%d.other.example A 192.0.2.1", i))
-	}
-	lines = append(lines, "192.0.2.1 PTR mail.example.com", "mail.example.com A 192.0.2.1")
-	z := zone(lines...)
-	want(t, "11th name ignored", mailFrom(z, "192.0.2.1", "a@example.com"), ResultFail)
-	if z.count("A", "mail.example.com") != 0 {
-		t.Error("the 11th PTR name was looked up")
-	}
-	if got := expandFor(t, z, "%{p}", "192.0.2.1", "a@example.com", "example.com", false); got != "h0.other.example" {
-		t.Errorf("%%{p} = %q, want the first validated name", got)
-	}
+	want(t, "10 MX names", mailFrom(z, "192.0.2.10", "a@ten.example"), spf.ResultPass)
+	want(t, "11 MX names", mailFrom(z, "192.0.2.1", "a@eleven.example"), spf.ResultPermError)
 }
 
 // TestVoidLookupLimit checks that more than two void lookups (no such name,
@@ -491,9 +471,9 @@ func TestVoidLookupLimit(t *testing.T) {
 		"ptr.example TXT v=spf1 a:nx1.example exists:nx2.example ptr -all",
 		"nodata.example TXT v=spf1 -all",
 	)
-	want(t, "two voids", mailFrom(z, "192.0.2.1", "a@two.example"), ResultFail)
-	want(t, "three voids", mailFrom(z, "192.0.2.1", "a@three.example"), ResultPermError)
-	want(t, "ptr void", mailFrom(z, "192.0.2.1", "a@ptr.example"), ResultPermError)
+	want(t, "two voids", mailFrom(z, "192.0.2.1", "a@two.example"), spf.ResultFail)
+	want(t, "three voids", mailFrom(z, "192.0.2.1", "a@three.example"), spf.ResultPermError)
+	want(t, "ptr void", mailFrom(z, "192.0.2.1", "a@ptr.example"), spf.ResultPermError)
 }
 
 // TestCheckHostIPv6ZoneIgnored checks that a zone on the client address does
@@ -502,6 +482,6 @@ func TestVoidLookupLimit(t *testing.T) {
 // checklist: SPF-MECH-01
 func TestCheckHostIPv6ZoneIgnored(t *testing.T) {
 	z := zone("example.com TXT v=spf1 ip6:fe80::/16 -all")
-	got := CheckHost(context.Background(), netip.MustParseAddr("fe80::1%eth0"), "example.com", "a@example.com", "", opts(z))
-	want(t, "zone", got, ResultPass)
+	got := spf.CheckHost(context.Background(), netip.MustParseAddr("fe80::1%eth0"), "example.com", "a@example.com", "", opts(z))
+	want(t, "zone", got, spf.ResultPass)
 }

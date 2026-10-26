@@ -1,10 +1,12 @@
-package spf
+package rfctest
 
 import (
 	"context"
 	"net/netip"
 	"strings"
 	"testing"
+
+	"github.com/rest-mail/go-spf/pkg/spf"
 )
 
 // Modifiers (RFC 7208 §6): redirect and exp.
@@ -21,7 +23,7 @@ func TestDuplicateModifiers(t *testing.T) {
 		"v=spf1 Redirect=a.example redirect=a.example",
 	} {
 		z := zone("example.com TXT " + rec)
-		want(t, rec, mailFrom(z, "192.0.2.1", "a@example.com"), ResultPermError)
+		want(t, rec, mailFrom(z, "192.0.2.1", "a@example.com"), spf.ResultPermError)
 	}
 }
 
@@ -35,9 +37,9 @@ func TestUnknownModifiers(t *testing.T) {
 		"example.com TXT v=spf1 foo=bar ip4:192.0.2.1 foo=baz moo.cow-far_out=man:dog/cat -all default=pass",
 		"bad.example TXT v=spf1 foo=%x -all",
 	)
-	want(t, "ignored", mailFrom(z, "192.0.2.1", "a@example.com"), ResultPass)
-	want(t, "ignored, no match", mailFrom(z, "192.0.2.2", "a@example.com"), ResultFail)
-	want(t, "bad macro", mailFrom(z, "192.0.2.1", "a@bad.example"), ResultPermError)
+	want(t, "ignored", mailFrom(z, "192.0.2.1", "a@example.com"), spf.ResultPass)
+	want(t, "ignored, no match", mailFrom(z, "192.0.2.2", "a@example.com"), spf.ResultFail)
+	want(t, "bad macro", mailFrom(z, "192.0.2.1", "a@bad.example"), spf.ResultPermError)
 }
 
 // TestRedirect checks redirect: when no mechanism matches, the target's result
@@ -57,14 +59,14 @@ func TestRedirect(t *testing.T) {
 		"bad.example TXT v=spf1 redirect=%{l}.example",
 		"before.example TXT v=spf1 redirect=example.com ip4:192.0.2.9",
 	)
-	want(t, "mechanism matched first", mailFrom(z, "198.51.100.1", "bob@example.com"), ResultPass)
-	want(t, "redirect pass", mailFrom(z, "192.0.2.1", "alice@example.com"), ResultPass)
-	want(t, "redirect softfail", mailFrom(z, "192.0.2.1", "bob@example.com"), ResultSoftfail)
-	want(t, "chained", mailFrom(z, "192.0.2.1", "bob@chain.example"), ResultSoftfail)
-	want(t, "no record", mailFrom(z, "192.0.2.1", "a@none.example"), ResultPermError)
-	want(t, "NXDOMAIN", mailFrom(z, "192.0.2.1", "a@nx.example"), ResultPermError)
-	want(t, "malformed target", mailFrom(z, "192.0.2.1", "a.@bad.example"), ResultPermError)
-	want(t, "redirect written first", mailFrom(z, "192.0.2.9", "a@before.example"), ResultPass)
+	want(t, "mechanism matched first", mailFrom(z, "198.51.100.1", "bob@example.com"), spf.ResultPass)
+	want(t, "redirect pass", mailFrom(z, "192.0.2.1", "alice@example.com"), spf.ResultPass)
+	want(t, "redirect softfail", mailFrom(z, "192.0.2.1", "bob@example.com"), spf.ResultSoftfail)
+	want(t, "chained", mailFrom(z, "192.0.2.1", "bob@chain.example"), spf.ResultSoftfail)
+	want(t, "no record", mailFrom(z, "192.0.2.1", "a@none.example"), spf.ResultPermError)
+	want(t, "NXDOMAIN", mailFrom(z, "192.0.2.1", "a@nx.example"), spf.ResultPermError)
+	want(t, "malformed target", mailFrom(z, "192.0.2.1", "a.@bad.example"), spf.ResultPermError)
+	want(t, "redirect written first", mailFrom(z, "192.0.2.9", "a@before.example"), spf.ResultPass)
 }
 
 // TestExplanationAbsent checks that a fail without an exp= modifier returns
@@ -77,7 +79,7 @@ func TestExplanationAbsent(t *testing.T) {
 		"soft.example TXT v=spf1 ~all exp=explain.example",
 		"explain.example TXT go away",
 	)
-	if got := mailFrom(z, "192.0.2.1", "a@example.com"); got.Result != ResultFail || got.Explanation != "" {
+	if got := mailFrom(z, "192.0.2.1", "a@example.com"); got.Result != spf.ResultFail || got.Explanation != "" {
 		t.Errorf("no exp: %+v", got)
 	}
 	if got := mailFrom(z, "192.0.2.1", "a@soft.example"); got.Explanation != "" {
@@ -95,7 +97,7 @@ func TestExplanation(t *testing.T) {
 		"explain._spf.example.com TXT Mail from example.com should only be sent by its own servers.",
 	)
 	got := mailFrom(z, "192.0.2.1", "a@example.com")
-	if got.Result != ResultFail || got.Explanation != "Mail from example.com should only be sent by its own servers." {
+	if got.Result != spf.ResultFail || got.Explanation != "Mail from example.com should only be sent by its own servers." {
 		t.Errorf("got %+v", got)
 	}
 	if got := mailFrom(z, "192.0.2.2", "a@example.com"); got.Explanation != "" {
@@ -120,7 +122,7 @@ func TestExplanationProblems(t *testing.T) {
 	} {
 		z := zone(append(lines, "example.com TXT v=spf1 -all exp="+target)...)
 		got := mailFrom(z, "192.0.2.1", strings.Repeat("x", 70)+"@example.com")
-		if got.Result != ResultFail || got.Explanation != "" {
+		if got.Result != spf.ResultFail || got.Explanation != "" {
 			t.Errorf("%s: got %+v, want fail with no explanation", target, got)
 		}
 	}
@@ -141,10 +143,10 @@ func TestExplanationMacros(t *testing.T) {
 	if got.Explanation != exp {
 		t.Errorf("Explanation =\n%q\nwant\n%q", got.Explanation, exp)
 	}
-	z.txt["explain.example"] = []string{"%{c} %{r}"}
+	z.TXT["explain.example"] = []string{"%{c} %{r}"}
 	o := opts(z)
 	o.Receiver = ""
-	got = CheckMailFrom(context.Background(), netip.MustParseAddr("2001:db8::cb01"), "a@example.com", testHELO, o)
+	got = spf.CheckMailFrom(context.Background(), netip.MustParseAddr("2001:db8::cb01"), "a@example.com", testHELO, o)
 	if got.Explanation != "2001:db8::cb01 unknown" {
 		t.Errorf("IPv6 %%{c} and default %%{r}: %q", got.Explanation)
 	}
@@ -167,21 +169,6 @@ func TestExplanationASCII(t *testing.T) {
 	}
 	if got := mailFrom(z, "192.0.2.1", "a@utf8.example"); got.Explanation != "" {
 		t.Errorf("non-ASCII explanation record: %q, want it ignored", got.Explanation)
-	}
-}
-
-// TestExplanationLength checks that a long explanation is cut to a length
-// that fits an SMTP reply line.
-//
-// checklist: SPF-MOD-08
-func TestExplanationLength(t *testing.T) {
-	z := zone(
-		"example.com TXT v=spf1 -all exp=explain.example",
-		"explain.example TXT "+strings.Repeat("%{s} ", 100),
-	)
-	got := mailFrom(z, "192.0.2.1", "someone@example.com")
-	if len(got.Explanation) != maxExplanation {
-		t.Errorf("len(Explanation) = %d, want %d", len(got.Explanation), maxExplanation)
 	}
 }
 
@@ -208,26 +195,8 @@ func TestExplanationScope(t *testing.T) {
 		"a@redirnoexp.example": "",
 	} {
 		got := mailFrom(z, "192.0.2.1", sender)
-		if got.Result != ResultFail || got.Explanation != exp {
+		if got.Result != spf.ResultFail || got.Explanation != exp {
 			t.Errorf("%s: got %+v, want fail with %q", sender, got, exp)
 		}
-	}
-}
-
-// TestResponseTextIsPrintable checks that Reason, which may quote names from
-// the sender or from DNS, is printable US-ASCII, so it is safe in a header
-// field.
-//
-// checklist: SPF-HDR-04
-func TestResponseTextIsPrintable(t *testing.T) {
-	z := zone()
-	got := CheckHost(context.Background(), netip.MustParseAddr("192.0.2.1"), "bad\r\nX-Evil: 1", "a@bad", "", opts(z))
-	for i := 0; i < len(got.Reason); i++ {
-		if got.Reason[i] < 0x20 || got.Reason[i] > 0x7e {
-			t.Fatalf("Reason %q holds byte %#x", got.Reason, got.Reason[i])
-		}
-	}
-	if printable("ok") != "ok" || printable("a\x00\xffb") != "a??b" {
-		t.Error("printable")
 	}
 }

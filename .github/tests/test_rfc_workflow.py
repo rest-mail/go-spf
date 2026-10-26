@@ -7,11 +7,11 @@ import contextlib
 import io
 import json
 import os
-from pathlib import Path
 import subprocess
 import tempfile
 import textwrap
 import unittest
+from pathlib import Path
 from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -19,7 +19,7 @@ WORKFLOW = ROOT / '.github/workflows/rfc-verification.yml'
 SOURCE = textwrap.dedent(WORKFLOW.read_text().split('# BEGIN RFC PROOF\n', 1)[1]
                          .split('          # END RFC PROOF', 1)[0])
 PROOF = {'__name__': 'rfc_proof_fixture'}
-exec(compile(SOURCE, str(WORKFLOW), 'exec'), PROOF)
+exec(compile(SOURCE, str(WORKFLOW), 'exec'), PROOF)  # noqa: S102 - the workflow's own helper
 
 
 def configuration(packages=None, dirs=None, targets=None):
@@ -108,9 +108,9 @@ class GateFixtures(unittest.TestCase):
             self.assertEqual(PROOF['go']('test', '-list=^Fuzz', '.', capture=True), 'output')
             run.assert_called_once_with(['go', 'test', '-list=^Fuzz', '.'], check=True,
                                         text=True, stdout=subprocess.PIPE)
-        with patch.object(subprocess, 'run', side_effect=subprocess.CalledProcessError(1, ['go'])):
-            with self.assertRaises(subprocess.CalledProcessError):
-                PROOF['go']('test', '.')
+        with patch.object(subprocess, 'run', side_effect=subprocess.CalledProcessError(1, ['go'])), \
+                self.assertRaises(subprocess.CalledProcessError):
+            PROOF['go']('test', '.')
 
     def test_exact_fuzz_selection_and_retained_race_commands(self):
         calls = []
@@ -126,7 +126,8 @@ class GateFixtures(unittest.TestCase):
             PROOF['verify'](configuration())
         self.assertEqual(calls, [
             (('test', '-list=^Fuzz', '.'), {'capture': True}),
-            (('test', '-race', '-count=1', '-covermode=atomic', '-coverprofile=coverage.out', './...'), {}),
+            (('test', '-race', '-count=1', '-covermode=atomic', '-coverpkg=./...',
+              '-coverprofile=coverage.out', './...'), {}),
             (('tool', 'cover', '-func=coverage.out'), {'capture': True}),
             (('run', './internal/checklist', '-file', 'CHECKLIST.md', '.'), {}),
             (('test', '-run=^$', '-fuzz=^FuzzParseRecord$', '-fuzztime=30s', '.'), {}),
@@ -155,6 +156,45 @@ class GateFixtures(unittest.TestCase):
                 }, check=False)
                 with self.subTest(rfc=rfc, fixtures=fixtures):
                     self.assertEqual(result.returncode == 0, rfc == fixtures == 'success')
+
+
+def caller_input(name):
+    """Return the JSON value ci.yml passes to the reusable workflow as name."""
+    lines = (ROOT / '.github/workflows/ci.yml').read_text().splitlines()
+    for i, line in enumerate(lines):
+        key, _, value = line.strip().partition(': ')
+        if key != name:
+            continue
+        if value != '>-':
+            return json.loads(value.strip("'"))
+        indent = len(line) - len(line.lstrip())
+        block = []
+        for more in lines[i + 1:]:
+            if more.strip() and len(more) - len(more.lstrip()) <= indent:
+                break
+            block.append(more.strip())
+        return json.loads(' '.join(block))
+    raise KeyError(name)
+
+
+class CallerFixtures(unittest.TestCase):
+    """The paths ci.yml hands the workflow name real packages of this repo."""
+
+    def test_checklist_dirs_hold_tests(self):
+        dirs = caller_input('checklist-dirs')
+        self.assertTrue(dirs)
+        for d in dirs:
+            with self.subTest(dir=d):
+                self.assertTrue(list((ROOT / d).glob('*_test.go')), f'{d} has no tests')
+
+    def test_fuzz_targets_run_from_the_package_that_declares_them(self):
+        targets = caller_input('fuzz-targets')
+        self.assertTrue(targets)
+        for item in targets:
+            with self.subTest(**item):
+                declared = [f for f in (ROOT / item['package']).glob('*_test.go')
+                            if f'func {item["target"]}(' in f.read_text()]
+                self.assertTrue(declared, f'{item["target"]} is not declared in {item["package"]}')
 
 
 class ChecklistFixtures(unittest.TestCase):
@@ -186,7 +226,7 @@ class ChecklistFixtures(unittest.TestCase):
                     'package fixture\n// checklist: ' + annotation + '\nfunc TestProof(t *testing.T) {}\n')
                 calls = []
 
-                def go(*args, **kwargs):
+                def go(*args, calls=calls, path=path, **kwargs):
                     calls.append(args)
                     if args[:2] == ('test', '-list=^Fuzz'):
                         return 'FuzzParseRecord\n'
@@ -195,8 +235,7 @@ class ChecklistFixtures(unittest.TestCase):
                     if args[0] == 'run':
                         # Exercise exactly the shared gate's CLI arguments.
                         return subprocess.run([self.binary, *args[2:]], cwd=path, check=True,
-                                              text=True, stdout=subprocess.PIPE,
-                                              stderr=subprocess.PIPE).stdout
+                                              text=True, capture_output=True).stdout
 
                 with patch.dict(PROOF, go=go), contextlib.redirect_stdout(io.StringIO()):
                     if success:

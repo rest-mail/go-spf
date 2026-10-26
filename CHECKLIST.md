@@ -11,9 +11,10 @@ separately as n/a for this evaluator; n/a does not waive a publisher or MTA
 operator's RFC duties. The audit log below records the sections reviewed.
 
 An item that does not apply to a library (because it is the receiving MTA's
-policy, say) says "n/a" and why. CI checks this file against the tests with
-`go run ./internal/checklist`; the format is described in the
-[README](README.md#the-rfc-checklist).
+policy, say) says "n/a" and why. CI checks this file against the tests in
+`pkg/spf`, `pkg/spf/rfctest`, `pkg/spf/internal/syntax` and
+`pkg/spf/internal/idna` with `go run ./internal/checklist`; the format is
+described in the [README](README.md#the-rfc-checklist).
 
 Five caller responsibilities (SPF-ID-06/07, SPF-MOD-09 and
 SPF-RESULT-02/05) are mapped to executable usage examples. These examples

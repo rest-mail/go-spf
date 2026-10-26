@@ -1,10 +1,12 @@
-package spf
+package rfctest
 
 import (
 	"context"
 	"net/netip"
 	"reflect"
 	"testing"
+
+	"github.com/rest-mail/go-spf/pkg/spf"
 )
 
 // TestModifierPositions checks that publication advice about putting modifiers
@@ -36,12 +38,12 @@ func TestModifierPositions(t *testing.T) {
 				t.Run(record, func(t *testing.T) {
 					for _, tc := range []struct {
 						ip, mechanism, explanation string
-						result                     Result
+						result                     spf.Result
 						queries                    []string
 					}{
-						{"192.0.2.1", "ip4:192.0.2.1", "", ResultPass, []string{"TXT example.com"}},
-						{"192.0.2.2", "-ip4:192.0.2.2", "outer example.com", ResultFail, []string{"TXT example.com", "TXT outer-exp.example"}},
-						{"192.0.2.3", "-all", "target target.example", ResultFail, []string{"TXT example.com", "TXT target.example", "TXT target-exp.example"}},
+						{"192.0.2.1", "ip4:192.0.2.1", "", spf.ResultPass, []string{"TXT example.com"}},
+						{"192.0.2.2", "-ip4:192.0.2.2", "outer example.com", spf.ResultFail, []string{"TXT example.com", "TXT outer-exp.example"}},
+						{"192.0.2.3", "-all", "target target.example", spf.ResultFail, []string{"TXT example.com", "TXT target.example", "TXT target-exp.example"}},
 					} {
 						z := zone(
 							"example.com TXT "+record,
@@ -53,8 +55,8 @@ func TestModifierPositions(t *testing.T) {
 						if got.Result != tc.result || got.Mechanism != tc.mechanism || got.Explanation != tc.explanation {
 							t.Errorf("%s: got %+v, want %s / %s / %q", tc.ip, got, tc.result, tc.mechanism, tc.explanation)
 						}
-						if !reflect.DeepEqual(z.queries, tc.queries) {
-							t.Errorf("%s: queries = %v, want %v", tc.ip, z.queries, tc.queries)
+						if !reflect.DeepEqual(z.Queries, tc.queries) {
+							t.Errorf("%s: queries = %v, want %v", tc.ip, z.Queries, tc.queries)
 						}
 					}
 				})
@@ -71,17 +73,17 @@ func TestModifierPositions(t *testing.T) {
 func TestExplanationLookupTiming(t *testing.T) {
 	for _, tc := range []struct {
 		name, record string
-		result       Result
+		result       spf.Result
 		queries      []string
 	}{
-		{"pass", "v=spf1 +all", ResultPass, []string{"TXT example.com"}},
-		{"neutral", "v=spf1 ?all", ResultNeutral, []string{"TXT example.com"}},
-		{"default", "v=spf1", ResultNeutral, []string{"TXT example.com"}},
-		{"softfail", "v=spf1 ~all", ResultSoftfail, []string{"TXT example.com"}},
-		{"temperror", "v=spf1 a:broken.example", ResultTempError, []string{"TXT example.com", "A broken.example"}},
-		{"permerror", "v=spf1 unknown", ResultPermError, []string{"TXT example.com"}},
-		{"include", "v=spf1 include:included.example ?all", ResultNeutral, []string{"TXT example.com", "TXT included.example"}},
-		{"fail", "v=spf1 -all", ResultFail, []string{"TXT example.com", "PTR 192.0.2.1", "TXT unknown.exp.example"}},
+		{"pass", "v=spf1 +all", spf.ResultPass, []string{"TXT example.com"}},
+		{"neutral", "v=spf1 ?all", spf.ResultNeutral, []string{"TXT example.com"}},
+		{"default", "v=spf1", spf.ResultNeutral, []string{"TXT example.com"}},
+		{"softfail", "v=spf1 ~all", spf.ResultSoftfail, []string{"TXT example.com"}},
+		{"temperror", "v=spf1 a:broken.example", spf.ResultTempError, []string{"TXT example.com", "A broken.example"}},
+		{"permerror", "v=spf1 unknown", spf.ResultPermError, []string{"TXT example.com"}},
+		{"include", "v=spf1 include:included.example ?all", spf.ResultNeutral, []string{"TXT example.com", "TXT included.example"}},
+		{"fail", "v=spf1 -all", spf.ResultFail, []string{"TXT example.com", "PTR 192.0.2.1", "TXT unknown.exp.example"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			z := zone(
@@ -94,14 +96,14 @@ func TestExplanationLookupTiming(t *testing.T) {
 			got := mailFrom(z, "192.0.2.1", "alice@example.com")
 			want(t, tc.name, got, tc.result)
 			explanation := ""
-			if tc.result == ResultFail {
+			if tc.result == spf.ResultFail {
 				explanation = "denied"
 			}
 			if got.Explanation != explanation {
 				t.Errorf("explanation = %q, want %q", got.Explanation, explanation)
 			}
-			if !reflect.DeepEqual(z.queries, tc.queries) {
-				t.Errorf("queries = %v, want %v", z.queries, tc.queries)
+			if !reflect.DeepEqual(z.Queries, tc.queries) {
+				t.Errorf("queries = %v, want %v", z.Queries, tc.queries)
 			}
 		})
 	}
@@ -117,10 +119,10 @@ func TestExpandedTargetNotEscaped(t *testing.T) {
 		"example.com TXT v=spf1 exists:%{l}._spf.%{d} -all",
 		"%{i}+tag._spf.example.com A 127.0.0.2",
 	)
-	got := CheckMailFrom(context.Background(), netip.MustParseAddr("192.0.2.1"), "%{i}+tag@example.com", testHELO, opts(z))
-	want(t, "literal expansion", got, ResultPass)
+	got := spf.CheckMailFrom(context.Background(), netip.MustParseAddr("192.0.2.1"), "%{i}+tag@example.com", testHELO, opts(z))
+	want(t, "literal expansion", got, spf.ResultPass)
 	expected := []string{"TXT example.com", "A %{i}+tag._spf.example.com"}
-	if !reflect.DeepEqual(z.queries, expected) {
-		t.Errorf("queries = %v, want %v", z.queries, expected)
+	if !reflect.DeepEqual(z.Queries, expected) {
+		t.Errorf("queries = %v, want %v", z.Queries, expected)
 	}
 }

@@ -4,7 +4,7 @@ on:
   workflow_call:
     inputs:
       packages:
-        description: 'JSON array of local Go package patterns for race coverage'
+        description: 'JSON array of local Go package patterns for race coverage, measured across all of them (-coverpkg)'
         type: string
         default: '["./..."]'
       checklist-dirs:
@@ -135,7 +135,10 @@ jobs:
                   listed = go("test", "-list=^Fuzz", item["package"], capture=True).splitlines()
                   if item["target"] not in listed:
                       raise ValueError(f"fuzz target not found: {item}")
-              go("test", "-race", "-count=1", "-covermode=atomic", "-coverprofile=coverage.out", *packages)
+              # Count every selected package's statements whichever package's tests
+              # run them: black-box suites cover the packages they import.
+              go("test", "-race", "-count=1", "-covermode=atomic", "-coverpkg=" + ",".join(packages),
+                 "-coverprofile=coverage.out", *packages)
               coverage_total(go("tool", "cover", "-func=coverage.out", capture=True))
               go("run", "./internal/checklist", "-file", "CHECKLIST.md", *dirs)
               for item in targets:

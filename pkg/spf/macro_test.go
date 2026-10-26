@@ -3,6 +3,9 @@ package spf
 import (
 	"strings"
 	"testing"
+
+	"github.com/rest-mail/go-spf/pkg/spf/internal/dnstest"
+	"github.com/rest-mail/go-spf/pkg/spf/internal/syntax"
 )
 
 // Macros (RFC 7208 §7).
@@ -40,16 +43,16 @@ func TestMacroSyntaxErrors(t *testing.T) {
 		"%{d2r!}.example.org",
 		"%{ d}.example.org",
 	} {
-		if _, err := checkDomainSpec(spec); err == nil {
-			t.Errorf("checkDomainSpec(%q) = nil, want an error", spec)
+		if _, err := syntax.CheckDomainSpec(spec); err == nil {
+			t.Errorf("syntax.CheckDomainSpec(%q) = nil, want an error", spec)
 		}
 		z := zone("example.com TXT v=spf1 -exists:" + spec + " +all")
 		want(t, spec, mailFrom(z, "192.0.2.1", "a@example.com"), ResultPermError)
 	}
-	if _, err := parseMacroString("a b", false); err == nil {
+	if _, err := syntax.ParseMacroString("a b", false); err == nil {
 		t.Error("a space is not a macro-literal outside explanations")
 	}
-	if _, err := parseMacroString("%{d01}.%{d127}.%{d99999999999999999999}", false); err != nil {
+	if _, err := syntax.ParseMacroString("%{d01}.%{d127}.%{d99999999999999999999}", false); err != nil {
 		t.Errorf("leading zero and long digit transformers: %v", err)
 	}
 }
@@ -84,7 +87,7 @@ func TestMacroLetters(t *testing.T) {
 		t.Errorf("IPv6 %%{v} = %q", got)
 	}
 	e := newEvaluator(t.Context(), mustAddr("192.0.2.3"), "example.com", "a@example.com", "", opts(z))
-	toks, _ := parseMacroString("%{h}", false)
+	toks, _ := syntax.ParseMacroString("%{h}", false)
 	if got, _ := e.expand(toks, "example.com", true); got != "unknown" {
 		t.Errorf("%%{h} without a HELO = %q, want unknown", got)
 	}
@@ -97,10 +100,10 @@ func TestMacroLetters(t *testing.T) {
 func TestExpOnlyMacros(t *testing.T) {
 	for _, l := range []string{"c", "r", "t", "C", "R", "T"} {
 		spec := "%{" + l + "}.example.org"
-		if _, err := checkDomainSpec(spec); err == nil {
+		if _, err := syntax.CheckDomainSpec(spec); err == nil {
 			t.Errorf("%s accepted in a domain-spec", spec)
 		}
-		if _, err := parseMacroString(spec, true); err != nil {
+		if _, err := syntax.ParseMacroString(spec, true); err != nil {
 			t.Errorf("%s refused in an explanation: %v", spec, err)
 		}
 	}
@@ -234,11 +237,11 @@ func TestMacroP(t *testing.T) {
 	if got := expandFor(t, z, "%{p}", "192.0.2.3", "a@example.com", "example.com", false); got != "unknown" {
 		t.Errorf("%%{p} with no PTR = %q", got)
 	}
-	z.queries = nil
+	z.Queries = nil
 	e := newEvaluator(t.Context(), mustAddr("192.0.2.1"), "example.com", "a@example.com", "", opts(z))
-	toks, _ := parseMacroString("%{p}.%{p}", false)
-	if got, _ := e.expand(toks, "example.com", true); got != "example.com.example.com" || z.count("PTR", "") != 1 || e.lookups != 1 {
-		t.Errorf("%%{p}.%%{p} = %q with %d PTR queries and %d counted lookups", got, z.count("PTR", ""), e.lookups)
+	toks, _ := syntax.ParseMacroString("%{p}.%{p}", false)
+	if got, _ := e.expand(toks, "example.com", true); got != "example.com.example.com" || z.Count("PTR", "") != 1 || e.lookups != 1 {
+		t.Errorf("%%{p}.%%{p} = %q with %d PTR queries and %d counted lookups", got, z.Count("PTR", ""), e.lookups)
 	}
 
 	// In a record, %{p} is charged against the DNS-query limit.
@@ -246,12 +249,12 @@ func TestMacroP(t *testing.T) {
 	for i := 0; i < 9; i++ {
 		b.WriteString(" a:example.com")
 	}
-	z.txt["p.example"] = []string{"v=spf1" + b.String() + " exists:%{p}.check.test -all"}
+	z.TXT["p.example"] = []string{"v=spf1" + b.String() + " exists:%{p}.check.test -all"}
 	want(t, "%{p} over the limit", mailFrom(z, "198.51.100.1", "a@p.example"), ResultPermError)
-	z.txt["p.example"] = []string{"v=spf1" + b.String() + " redirect=%{p}.example"}
+	z.TXT["p.example"] = []string{"v=spf1" + b.String() + " redirect=%{p}.example"}
 	want(t, "%{p} in redirect over the limit", mailFrom(z, "198.51.100.1", "a@p.example"), ResultPermError)
-	z.txt["p.example"] = []string{"v=spf1 -all exp=e.example"}
-	z.txt["e.example"] = []string{"%{p}"}
+	z.TXT["p.example"] = []string{"v=spf1 -all exp=e.example"}
+	z.TXT["e.example"] = []string{"%{p}"}
 	if got := mailFrom(z, "192.0.2.1", "a@p.example"); got.Explanation != "other.example" {
 		t.Errorf("%%{p} in an explanation = %q", got.Explanation)
 	}
@@ -267,18 +270,18 @@ func TestTargetTruncation(t *testing.T) {
 	long := strings.Repeat("abcdefghi.", 30) // 300 characters
 	z := zone("example.com TXT v=spf1 exists:%{l}.check.test -all")
 	tail := strings.Repeat("abcdefghi.", 24) + "check.test"
-	z.addr[canon(tail)] = append(z.addr[canon(tail)], mustAddr("127.0.0.2"))
+	z.Addr[dnstest.Canon(tail)] = append(z.Addr[dnstest.Canon(tail)], mustAddr("127.0.0.2"))
 	want(t, "truncated", mailFrom(z, "192.0.2.1", strings.TrimSuffix(long, ".")+"@example.com"), ResultPass)
-	if len(tail) > 253 || z.count("A", canon(tail)) != 1 {
-		t.Errorf("queries = %v, want one for %q (%d)", z.queries, tail, len(tail))
+	if len(tail) > 253 || z.Count("A", dnstest.Canon(tail)) != 1 {
+		t.Errorf("queries = %v, want one for %q (%d)", z.Queries, tail, len(tail))
 	}
 
 	e := newEvaluator(t.Context(), mustAddr("192.0.2.1"), "example.com", strings.Repeat("x", 300)+"@example.com", "", opts(z))
-	toks, _ := parseMacroString("%{l}", false)
+	toks, _ := syntax.ParseMacroString("%{l}", false)
 	if _, ok, _ := e.target(toks, "example.com", true); ok {
 		t.Error("a 300-character label was accepted")
 	}
-	toks, _ = parseMacroString(strings.Repeat("%{s}", 100)+".example", false)
+	toks, _ = syntax.ParseMacroString(strings.Repeat("%{s}", 100)+".example", false)
 	if _, ok, _ := e.target(toks, "example.com", true); ok {
 		t.Error("an expansion past maxExpansion was accepted")
 	}
@@ -308,7 +311,7 @@ func TestHostileMacroInput(t *testing.T) {
 		got := CheckMailFrom(t.Context(), mustAddr("192.0.2.1"), local+"@example.com", local, opts(z))
 		want(t, local, got, ResultFail)
 	}
-	for _, q := range z.queries {
+	for _, q := range z.Queries {
 		name := strings.SplitN(q, " ", 2)[1]
 		if !validDomain(name) {
 			t.Errorf("queried %q", name)

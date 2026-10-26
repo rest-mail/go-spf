@@ -1,4 +1,4 @@
-package spf
+package syntax
 
 import (
 	"errors"
@@ -12,13 +12,13 @@ import (
 // syntax error anywhere makes the whole record a permerror (§4.6). Expansion
 // then only substitutes values, so it cannot fail on syntax.
 
-// macroToken is one piece of a parsed macro-string: literal text, or a
+// MacroToken is one piece of a parsed macro-string: literal text, or a
 // %{...} macro with its transformers.
-type macroToken struct {
-	lit      string // literal text; empty for a %{...} macro
+type MacroToken struct {
+	Lit      string // literal text; empty for a %{...} macro
 	escape   bool   // the literal came from %%, %_ or %- (a macro-expand)
-	letter   byte   // lowercase macro letter; 0 for literal text
-	urlEsc   bool   // uppercase letter: URL-escape the value (§7.3)
+	Letter   byte   // lowercase macro letter; 0 for literal text
+	URLEsc   bool   // uppercase letter: URL-escape the value (§7.3)
 	digits   int    // keep this many right-hand parts; 0 keeps all
 	reverse  bool   // the "r" transformer
 	delims   string // split characters; "" means "."
@@ -41,15 +41,15 @@ const (
 	delimiters   = ".-+,/_="
 )
 
-// parseMacroString parses a macro-string (§7.1). With explain set it parses an
+// ParseMacroString parses a macro-string (§7.1). With explain set it parses an
 // explain-string instead: spaces are literal text and the c, r and t macros are
 // allowed.
-func parseMacroString(s string, explain bool) ([]macroToken, error) {
-	var toks []macroToken
+func ParseMacroString(s string, explain bool) ([]MacroToken, error) {
+	var toks []MacroToken
 	var lit strings.Builder
 	flush := func() {
 		if lit.Len() > 0 {
-			toks = append(toks, macroToken{lit: lit.String()})
+			toks = append(toks, MacroToken{Lit: lit.String()})
 			lit.Reset()
 		}
 	}
@@ -69,7 +69,7 @@ func parseMacroString(s string, explain bool) ([]macroToken, error) {
 		switch s[i+1] {
 		case '%', '_', '-':
 			flush()
-			toks = append(toks, macroToken{lit: escapes[s[i+1]], escape: true})
+			toks = append(toks, MacroToken{Lit: escapes[s[i+1]], escape: true})
 			i += 2
 		case '{':
 			end := strings.IndexByte(s[i:], '}')
@@ -93,14 +93,14 @@ func parseMacroString(s string, explain bool) ([]macroToken, error) {
 
 // parseMacro parses the body of %{...}: a letter, an optional digit count, an
 // optional "r", and optional delimiters.
-func parseMacro(body string, explain bool) (macroToken, error) {
+func parseMacro(body string, explain bool) (MacroToken, error) {
 	if body == "" {
-		return macroToken{}, errors.New("empty macro")
+		return MacroToken{}, errors.New("empty macro")
 	}
-	t := macroToken{letter: lower(body[0]), urlEsc: body[0] >= 'A' && body[0] <= 'Z'}
-	if !strings.ContainsRune(macroLetters, rune(t.letter)) &&
-		(!explain || !strings.ContainsRune(expLetters, rune(t.letter))) {
-		return macroToken{}, fmt.Errorf("invalid macro letter %q", body[0])
+	t := MacroToken{Letter: lower(body[0]), URLEsc: body[0] >= 'A' && body[0] <= 'Z'}
+	if !strings.ContainsRune(macroLetters, rune(t.Letter)) &&
+		(!explain || !strings.ContainsRune(expLetters, rune(t.Letter))) {
+		return MacroToken{}, fmt.Errorf("invalid macro letter %q", body[0])
 	}
 	rest := body[1:]
 	t.expanded = rest != ""
@@ -112,7 +112,7 @@ func parseMacro(body string, explain bool) (macroToken, error) {
 		n++
 	}
 	if n > 0 && t.digits == 0 {
-		return macroToken{}, errors.New("macro digit transformer must be nonzero")
+		return MacroToken{}, errors.New("macro digit transformer must be nonzero")
 	}
 	t.digits = min(t.digits, maxMacroDigits)
 	rest = rest[n:]
@@ -122,7 +122,7 @@ func parseMacro(body string, explain bool) (macroToken, error) {
 	}
 	for i := 0; i < len(rest); i++ {
 		if strings.IndexByte(delimiters, rest[i]) < 0 {
-			return macroToken{}, fmt.Errorf("invalid macro delimiter %q", rest[i])
+			return MacroToken{}, fmt.Errorf("invalid macro delimiter %q", rest[i])
 		}
 	}
 	t.delims = rest
@@ -133,10 +133,10 @@ func parseMacro(body string, explain bool) (macroToken, error) {
 // character other than "%" (§7.1).
 func isMacroLiteral(c byte) bool { return c >= 0x21 && c <= 0x7e && c != '%' }
 
-// checkDomainSpec parses a domain-spec (§7.1): a macro-string that ends either
+// CheckDomainSpec parses a domain-spec (§7.1): a macro-string that ends either
 // in a macro-expand or in "." toplabel with an optional trailing dot.
-func checkDomainSpec(spec string) ([]macroToken, error) {
-	toks, err := parseMacroString(spec, false)
+func CheckDomainSpec(spec string) ([]MacroToken, error) {
+	toks, err := ParseMacroString(spec, false)
 	if err != nil {
 		return nil, err
 	}
@@ -144,21 +144,21 @@ func checkDomainSpec(spec string) ([]macroToken, error) {
 		return nil, errors.New("empty domain-spec")
 	}
 	last := toks[len(toks)-1]
-	if last.letter != 0 || last.escape {
+	if last.Letter != 0 || last.escape {
 		return toks, nil
 	}
-	tail := strings.TrimSuffix(last.lit, ".")
+	tail := strings.TrimSuffix(last.Lit, ".")
 	dot := strings.LastIndexByte(tail, '.')
-	if dot < 0 || !isTopLabel(tail[dot+1:]) {
+	if dot < 0 || !IsTopLabel(tail[dot+1:]) {
 		return nil, fmt.Errorf("domain-spec %q does not end in a valid top-level label", spec)
 	}
 	return toks, nil
 }
 
-// isTopLabel reports whether s matches the toplabel rule of §7.1: letters,
+// IsTopLabel reports whether s matches the toplabel rule of §7.1: letters,
 // digits and hyphens, not all digits, and neither starting nor ending with a
 // hyphen.
-func isTopLabel(s string) bool {
+func IsTopLabel(s string) bool {
 	if s == "" || s[0] == '-' || s[len(s)-1] == '-' {
 		return false
 	}
@@ -176,10 +176,10 @@ func isTopLabel(s string) bool {
 	return alpha || hyphen
 }
 
-// transform applies a macro's transformers (§7.3): split the value on the
+// Transform applies a macro's transformers (§7.3): split the value on the
 // delimiters, optionally reverse the parts, keep the right-hand ones, and
 // rejoin them with ".".
-func (t macroToken) transform(v string) string {
+func (t MacroToken) Transform(v string) string {
 	if !t.expanded {
 		return v
 	}
@@ -207,9 +207,9 @@ func (t macroToken) transform(v string) string {
 	return strings.Join(parts, ".")
 }
 
-// urlEscape percent-encodes every character outside the RFC 3986 unreserved
+// URLEscape percent-encodes every character outside the RFC 3986 unreserved
 // set, as uppercase macros require (§7.3).
-func urlEscape(s string) string {
+func URLEscape(s string) string {
 	const hex = "0123456789ABCDEF"
 	var b strings.Builder
 	for i := 0; i < len(s); i++ {

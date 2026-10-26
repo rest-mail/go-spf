@@ -6,7 +6,7 @@ import (
 	"net"
 	"net/netip"
 
-	"github.com/rest-mail/go-spf"
+	"github.com/rest-mail/go-spf/pkg/spf"
 )
 
 // staticDNS is a tiny in-memory spf.Resolver, so the example needs no real
