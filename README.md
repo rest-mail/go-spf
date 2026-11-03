@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/rest-mail/go-spf/actions/workflows/ci.yml/badge.svg)](https://github.com/rest-mail/go-spf/actions/workflows/ci.yml)
 [![Coverage gate: >=95%](https://img.shields.io/badge/coverage%20gate-%3E%3D95%25-brightgreen)](COVERAGE.md)
-[![Checklist: 84/104 mapped](https://img.shields.io/badge/checklist-84%2F104%20mapped-blue)](CHECKLIST.md)
+[![Checklist: 91/104 mapped](https://img.shields.io/badge/checklist-91%2F104%20mapped-blue)](CHECKLIST.md)
 [![Go Reference](https://pkg.go.dev/badge/github.com/rest-mail/go-spf.svg)](https://pkg.go.dev/github.com/rest-mail/go-spf/pkg/spf)
 [![Go Report Card](https://goreportcard.com/badge/github.com/rest-mail/go-spf)](https://goreportcard.com/report/github.com/rest-mail/go-spf)
 
@@ -99,8 +99,9 @@ res := spf.CheckMailFrom(ctx, client, "<alice@example.com>", "mail.example.com",
 ```
 
 `Example` in [`pkg/spf/example_test.go`](pkg/spf/example_test.go) runs whole
-checks against a static in-memory resolver, and two more examples there show a
-receiver's identity order and result policy.
+checks against a static in-memory resolver, and three more examples there show
+a receiver's identity order, its result policy, and its replies and
+`Received-SPF` fields.
 
 ## Features
 
@@ -115,6 +116,8 @@ receiver's identity order and result policy.
 | Internationalized names | [RFC 8616] §4 | U-labels in the domain, the sender's domain and the HELO name are checked as A-labels. |
 | DNS | | Behind a `Resolver` interface that `*net.Resolver` satisfies. |
 | Safe output | §11 | `Reason` and `Explanation` are always printable US-ASCII, and the explanation is at most 400 characters. |
+| SMTP replies | §8, [RFC 7372] §3.2 | The reply §8 recommends if the receiver rejects on `fail`, `temperror` or `permerror`, with RFC 7372's enhanced status codes. |
+| `Received-SPF` | §9.1 | The field value or the whole folded field, built from a check: result, comment and the `receiver`, `client-ip`, `envelope-from`, `helo`, `identity`, `mechanism` and `problem` keys, with each value quoted to the grammar and a CR or LF never let through. |
 
 ### The API
 
@@ -131,6 +134,33 @@ receiver's identity order and result policy.
   human-readable `Reason`.
 - An IPv4-mapped IPv6 client address is checked as the IPv4 address it
   carries. A zero `netip.Addr` gives `permerror`.
+- `result.SMTPReply()` names the reply RFC 7208 §8 recommends if the receiver
+  rejects on that result: `550 5.7.23` for `fail`, `451 4.7.24` for
+  `temperror` and `550 5.7.24` for `permerror`, with the enhanced status
+  codes RFC 7372 §3.2 assigns in place of §8's 5.7.1, 4.4.3 and 5.5.2. For
+  `none`, `neutral`, `pass` and `softfail` it reports no reply.
+  `response.SMTPReply()` is the same, but a `fail` with an explanation has
+  the explanation as its text. `reply.String()` gives the reply line.
+- `response.ReceivedSPF(spf.CheckInputs{...})` builds the `Received-SPF` field
+  value (§9.1) from the response and the check's inputs: the client IP, the
+  identity checked (`spf.IdentityMailFrom` or `spf.IdentityHELO`), the
+  reverse-path, the HELO name and the receiver's host name.
+  `response.ReceivedSPFField(...)` gives the whole field, folded at spaces to
+  78 octets where it can be and ending in CRLF.
+
+`ExampleResponse_ReceivedSPFField` in
+[`pkg/spf/example_test.go`](pkg/spf/example_test.go) sends the reply where
+the receiver rejects and records the check otherwise. A `pass` from
+192.0.2.1 for `<alice@example.com>` gives this field (lines end in CRLF):
+
+```text
+Received-SPF: pass (mx.example.net: domain of alice@example.com designates
+ 192.0.2.1 as permitted sender) receiver=mx.example.net; client-ip=192.0.2.1;
+ envelope-from="alice@example.com"; helo=mail.example.com; identity=mailfrom;
+ mechanism="ip4:192.0.2.0/24"
+```
+
+A `fail` from 198.51.100.7 gives the reply `550 5.7.23 SPF validation failed`.
 
 ## What the library does and what the host must do
 
@@ -192,13 +222,20 @@ The library:
 - Returns the result, the deciding mechanism and a reason. `Reason` and
   `Explanation` are printable US-ASCII, so they cannot break a header field
   or an SMTP reply.
+- Names the SMTP reply §8 recommends for a rejected `fail`, `temperror` or
+  `permerror`.
+- Builds the `Received-SPF` field (§9.1). A value from the SMTP session that
+  holds a byte outside printable US-ASCII (a CR or LF, say), is longer than
+  1000 octets, or has more than 400 octets without a space is left out, so
+  the field cannot be broken and no line passes 998 octets.
 
 The host:
 
 - Shows the `Explanation` of a `fail` as the domain's text, not its own.
-- Records the result in the message, in a `Received-SPF` or
-  `Authentication-Results` field, and places that field above any existing
-  `Received-SPF` field.
+- Decides whether to reject, and sends the reply.
+- Records the result in the message, in the `Received-SPF` field the library
+  builds or an `Authentication-Results` field, and places that field above
+  any existing `Received-SPF` field and its own `Received` field.
 
 ### Internationalized names
 
@@ -311,16 +348,15 @@ go run ./internal/checklist pkg/spf pkg/spf/rfctest pkg/spf/internal/syntax pkg/
 
 ### What it does not do
 
-Some gaps are deliberate, and go-spf will not fill them. Others are planned,
-each with an issue. The checklist records every one as an `n/a` row with its
-reason.
+Some gaps are deliberate, and go-spf will not fill them. The checklist
+records every one as an `n/a` row with its reason.
 
 #### Not supported, by design
 
 | Area | What go-spf does | Why |
 |------|------------------|-----|
-| The SMTP session | Returns a result. It sends no SMTP reply, does not choose when to check, and never rejects mail. | The mail server owns the session and its policy. Keeping them out keeps the library usable from any MTA. |
-| The message header | Writes no header field, and does not place or fold one. | The library never sees the message. Placing `Received-SPF` above the others and keeping it within line limits need the whole header. |
+| The SMTP session | Returns a result and names the reply the RFC recommends. It sends no SMTP reply, does not choose when to check, and never rejects mail. | The mail server owns the session and its policy. Keeping them out keeps the library usable from any MTA. |
+| The message header | Builds the `Received-SPF` field, but does not place it in the message. | The library never sees the message. Placing `Received-SPF` above the other `Received-SPF` fields and the receiver's `Received` field needs the whole header. |
 | The void-lookup limit | Fixed at two, not configurable. | Two is what RFC 7208 §4.6.4 recommends. The limit is a defence against hostile records, and a setting could only loosen it. |
 | DNS caching | Caches nothing between checks. | Caching belongs in the resolver, where the host can share it with its other lookups and honour TTLs. |
 | Full IDNA2008 mapping | Lower-cases a U-label but applies no NFC normalization or special folds (such as ß), and refuses a ZERO WIDTH (NON-)JOINER even after a virama. | These need Unicode tables beyond the standard library, and the library takes no dependencies. Only deliberately unusual spellings differ, and they give `none`, never a wrong `pass`. |
@@ -332,19 +368,12 @@ reason.
 | Publishing records | Evaluates published records only: no record generator or linter for record size, `ptr` use or modifier placement. Those are the publishing domain's duties. |
 | Authentication-Results ([RFC 8601]) and DMARC | Not implemented. They combine SPF with DKIM and belong in a layer above go-spf, which supplies the SPF result they need. |
 
-#### Planned
-
-| Gap | Issue |
-|-----|-------|
-| No method names the SMTP reply that RFC 7208 §8 recommends for `fail`, `temperror` and `permerror`. | [#10](https://github.com/rest-mail/go-spf/issues/10) |
-| No builder for the `Received-SPF` field value (§9.1) from a check. | [#11](https://github.com/rest-mail/go-spf/issues/11) |
-
 ### Badges and coverage
 
 The badges at the top are checked by `TestReadmeChecklistBadge` in
 `internal/checklist`, which reads the checklist directories from CI's own
 configuration, and by the workflow fixtures in `.github/tests`. The checklist
-badge counts mapped rows over all rows: the 20 `n/a` rows are in the
+badge counts mapped rows over all rows: the 13 `n/a` rows are in the
 denominator, so the badge never claims more than the tests prove. The
 coverage badge shows the floor CI enforces, not a measured figure; each CI
 run prints the measured statement coverage in its **RFC proof** log. CI
@@ -451,3 +480,4 @@ and `CheckHELO` for the two identities.
 [RFC 7208]: https://www.rfc-editor.org/rfc/rfc7208
 [RFC 8616]: https://www.rfc-editor.org/rfc/rfc8616
 [RFC 8601]: https://www.rfc-editor.org/rfc/rfc8601
+[RFC 7372]: https://www.rfc-editor.org/rfc/rfc7372

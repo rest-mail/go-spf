@@ -105,13 +105,7 @@ func CheckHELO(ctx context.Context, ip netip.Addr, helo string, opts *Options) R
 // dropped. An empty mailFrom (the null reverse-path) checks postmaster@<helo>.
 // helo is the HELO/EHLO name, which the %{h} macro expands to.
 func CheckMailFrom(ctx context.Context, ip netip.Addr, mailFrom, helo string, opts *Options) Response {
-	sender := strings.TrimSuffix(strings.TrimPrefix(mailFrom, "<"), ">")
-	if strings.HasPrefix(sender, "@") {
-		// A source route (RFC 5321 Appendix C) names relays, not the sender.
-		if i := strings.IndexByte(sender, ':'); i >= 0 {
-			sender = sender[i+1:]
-		}
-	}
+	sender := reversePath(mailFrom)
 	if sender == "" {
 		return CheckHost(ctx, ip, helo, "postmaster@"+helo, helo, opts)
 	}
