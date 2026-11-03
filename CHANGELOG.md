@@ -6,6 +6,27 @@ module tags of the form `vMAJOR.MINOR.PATCH`.
 
 ## [Unreleased]
 
+### Added
+
+- `Result.SMTPReply` names the SMTP reply RFC 7208 §8 recommends if a
+  receiver rejects on the result (#10): 550 5.7.23 for `fail`, 451 4.7.24 for
+  `temperror` and 550 5.7.24 for `permerror`, with the enhanced status codes
+  RFC 7372 §3.2 assigns in place of §8's 5.7.1, 4.4.3 and 5.5.2. It reports
+  no reply for `none`, `neutral`, `pass` and `softfail`. `Response.SMTPReply`
+  is the same, with a `fail`'s explanation as the reply text when there is
+  one. The `SMTPReply` type's `String` gives the reply line.
+- `Response.ReceivedSPF` builds the `Received-SPF` field value of RFC 7208
+  §9.1 from a check (#11): the result, a comment, and the `receiver`,
+  `client-ip`, `envelope-from`, `helo`, `identity`, `mechanism` and `problem`
+  keys, from a new `CheckInputs` struct and the `Identity` type
+  (`IdentityMailFrom`, `IdentityHELO`). Values are dot-atoms or escaped
+  quoted-strings; a value holding a byte outside printable US-ASCII (a CR or
+  LF, say), longer than 1000 octets, or with more than 400 octets without a
+  space is left out. `Response.ReceivedSPFField` gives the whole field,
+  folded at spaces and ending in CRLF, with no line over 998 octets.
+- CHECKLIST.md maps SPF-RESULT-03/04/06/07 and SPF-HDR-01/03/05 to tests:
+  91 of 104 rows mapped, 13 n/a.
+
 ## [0.2.0] - 2026-10-26
 
 ### Changed (breaking)

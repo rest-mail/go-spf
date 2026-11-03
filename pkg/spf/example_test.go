@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"net/netip"
+	"strings"
 
 	"github.com/rest-mail/go-spf/pkg/spf"
 )
@@ -158,4 +159,39 @@ func ExampleResult_receiverPolicy() {
 	// fail: reject
 	// temperror: defer
 	// permerror: reject invalid policy
+}
+
+// ExampleResponse_ReceivedSPFField records each check in a Received-SPF field
+// and, where the receiver rejects, sends the reply RFC 7208 §8 recommends.
+// Placing the field above the other Received-SPF fields stays the mail
+// server's job.
+func ExampleResponse_ReceivedSPFField() {
+	opts := &spf.Options{Resolver: staticDNS{
+		"example.com": {"v=spf1 ip4:192.0.2.0/24 -all"},
+	}}
+	for _, ip := range []string{"192.0.2.1", "198.51.100.7"} {
+		in := spf.CheckInputs{
+			ClientIP: netip.MustParseAddr(ip),
+			Identity: spf.IdentityMailFrom,
+			MailFrom: "<alice@example.com>",
+			HELO:     "mail.example.com",
+			Receiver: "mx.example.net",
+		}
+		resp := spf.CheckMailFrom(context.Background(), in.ClientIP, in.MailFrom, in.HELO, opts)
+		if reply, reject := resp.SMTPReply(); reject {
+			fmt.Println(reply)
+			continue
+		}
+		field, err := resp.ReceivedSPFField(in)
+		if err != nil {
+			panic(err)
+		}
+		fmt.Print(strings.ReplaceAll(field, "\r\n", "\n"))
+	}
+	// Output:
+	// Received-SPF: pass (mx.example.net: domain of alice@example.com designates
+	//  192.0.2.1 as permitted sender) receiver=mx.example.net; client-ip=192.0.2.1;
+	//  envelope-from="alice@example.com"; helo=mail.example.com; identity=mailfrom;
+	//  mechanism="ip4:192.0.2.0/24"
+	// 550 5.7.23 SPF validation failed
 }

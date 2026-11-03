@@ -23,12 +23,13 @@ and displayed text. They demonstrate compliant caller behaviour; the library
 still does not select identities, apply message disposition or present text
 on a caller's behalf.
 
-Each of the twenty n/a rows identifies a publisher or caller duty, a
-condition that does not hold (SPF-LIMIT-09), or missing library functionality.
-The three pending API proposals remain under
-[Left for the owner](#left-for-the-owner); none is implemented by this audit.
-No n/a row is mapped to a synthetic SMTP reply or header string written in a
-test, because that would prove the test, not the library.
+Each of the thirteen n/a rows identifies a publisher or caller duty, or a
+condition that does not hold (SPF-LIMIT-09). The one remaining API proposal,
+declined by design, is under [Left for the owner](#left-for-the-owner). The
+SMTP reply and Received-SPF rows are mapped to tests of the library's own
+`Result.SMTPReply`, `Response.SMTPReply`, `Response.ReceivedSPF` and
+`Response.ReceivedSPFField`, never to a reply or header string a test writes
+itself.
 
 ## Section audit (2026-10-22)
 
@@ -74,6 +75,18 @@ SPF-EAI-01/02; its note on UTF-8 local-parts in %{s} and %{l} is SPF-EAI-03.
 Its restatement that record IDNs MUST be A-labels is SPF-EVAL-03, now
 narrowed to records. Before this audit a U-label MAIL FROM domain gave
 `none`. Three new mapped rows. Total: 104 rows, 84 mapped and 20 n/a.
+
+## Result reporting (2026-11-03)
+
+Added the SMTP reply of §8.4, §8.6 and §8.7 for each result
+([#10](https://github.com/rest-mail/go-spf/issues/10)) and the Received-SPF
+field of §9.1 ([#11](https://github.com/rest-mail/go-spf/issues/11)). The
+reply carries the enhanced status codes RFC 7372 §3.2 registers in place of
+those §8 names. SPF-RESULT-03/04/06/07 and SPF-HDR-01/03/05 move from n/a to
+tests; SPF-HDR-04 gains the field's quoting test. SPF-HDR-02 and SPF-HDR-06,
+placing the field in the header, stay with the mail server. Authentication-
+Results stays out of scope, as the README records. Total: 104 rows, 91 mapped
+and 13 n/a.
 
 ## Identities (§2)
 
@@ -205,21 +218,21 @@ Section numbers in this table are RFC 8616's.
 |----|---------|-------|-------------|-------|
 | SPF-RESULT-01 | 2.6, 4.2 | Normative | check_host() returns one of none, neutral, pass, fail, softfail, temperror and permerror. | `TestSevenResults` |
 | SPF-RESULT-02 | 8.2 | MUST | Treat neutral exactly like none. | `ExampleResult_receiverPolicy` |
-| SPF-RESULT-03 | 8.4 | SHOULD | Reject a fail during SMTP with reply code 550 (5.7.1). | n/a: needs new public API. The library sends no SMTP replies and has no Result-to-reply mapping; the receiving MTA sends 550 5.7.1. See [Left for the owner](#left-for-the-owner). |
-| SPF-RESULT-04 | 8.4 | SHOULD | If a fail is accepted, add a Received-SPF or Authentication-Results field. | n/a: needs new public API. The library writes no header fields; the caller adds Received-SPF or Authentication-Results from Response. See [Left for the owner](#left-for-the-owner). |
+| SPF-RESULT-03 | 8.4 | SHOULD | Reject a fail during SMTP with reply code 550 (5.7.1; RFC 7372 §3.2 assigns 5.7.23 in its place). | `TestSMTPReply` |
+| SPF-RESULT-04 | 8.4 | SHOULD | If a fail is accepted, add a Received-SPF or Authentication-Results field. | `TestReceivedSPF` |
 | SPF-RESULT-05 | 8.5 | SHOULD NOT | Reject a message on softfail alone. | `ExampleResult_receiverPolicy` |
-| SPF-RESULT-06 | 8.6 | SHOULD | Reject a temperror during SMTP with reply code 451 (4.4.3). | n/a: needs new public API. The library sends no SMTP replies and has no Result-to-reply mapping; the receiving MTA sends 451 4.4.3. See [Left for the owner](#left-for-the-owner). |
-| SPF-RESULT-07 | 8.7 | SHOULD | Reject a permerror during SMTP with reply code 550 (5.5.2). | n/a: needs new public API. The library sends no SMTP replies and has no Result-to-reply mapping; the receiving MTA sends 550 5.5.2. See [Left for the owner](#left-for-the-owner). |
+| SPF-RESULT-06 | 8.6 | SHOULD | Reject a temperror during SMTP with reply code 451 (4.4.3; RFC 7372 §3.2 assigns 4.7.24 in its place). | `TestSMTPReply` |
+| SPF-RESULT-07 | 8.7 | SHOULD | Reject a permerror during SMTP with reply code 550 (5.5.2; RFC 7372 §3.2 assigns 5.7.24 in its place). | `TestSMTPReply` |
 
 ## Recording the result (§9)
 
 | ID | Section | Level | Requirement | Tests |
 |----|---------|-------|-------------|-------|
-| SPF-HDR-01 | 9 | RECOMMENDED | Record the result in the message header. | n/a: needs new public API. The library writes no header fields; its caller records the result. See [Left for the owner](#left-for-the-owner). |
+| SPF-HDR-01 | 9 | RECOMMENDED | Record the result in the message header. | `TestReceivedSPF` |
 | SPF-HDR-02 | 9.1 | MUST | Place the new Received-SPF above every other Received-SPF field. | n/a: caller's job. Ordering a new field above existing Received-SPF fields is the MTA's; the library sees no message. |
-| SPF-HDR-03 | 9.1 | SHOULD | Give a comment and the client-ip, helo and envelope-from keys in Received-SPF. | n/a: needs new public API. The library builds no Received-SPF field; Response carries the result, mechanism and reason a caller's field needs. See [Left for the owner](#left-for-the-owner). |
-| SPF-HDR-04 | 9.1, 11.5.1 | MUST | Header content holds no invalid characters or sender-supplied malicious data (the library's part: Reason and Explanation are printable US-ASCII). | `TestResponseTextIsPrintable` |
-| SPF-HDR-05 | 9.1 | MUST | Keep the complete Received-SPF field within RFC 5322 length limits. | n/a: caller's job. The library does not build or fold header fields. Printable Reason/Explanation text alone proves neither complete-field line lengths nor correct quoting; the MTA must validate its assembled field. |
+| SPF-HDR-03 | 9.1 | SHOULD | Give a comment and the client-ip, helo and envelope-from keys in Received-SPF. | `TestReceivedSPF` |
+| SPF-HDR-04 | 9.1, 11.5.1 | MUST | Header content holds no invalid characters or sender-supplied malicious data (Reason and Explanation are printable US-ASCII; Received-SPF leaves out any value that is not). | `TestResponseTextIsPrintable`, `TestReceivedSPFQuoting` |
+| SPF-HDR-05 | 9.1 | MUST | Keep the complete Received-SPF field within RFC 5322 length limits. | `TestReceivedSPFField` |
 | SPF-HDR-06 | 9.1 | SHOULD | Prepend Received-SPF above the receiver's own Received field. | n/a: caller's job. The evaluator receives no message or Received fields; the MTA controls insertion order. This SHOULD is separate from SPF-HDR-02's MUST. |
 
 ## Publisher duties (§3, §5–§7)
@@ -249,14 +262,12 @@ valid records that depart from publication recommendations.
 
 ## Left for the owner
 
-These rows could be covered by the library, but only by adding public API.
-None is built yet. The README's
-[What it does not do](README.md#what-it-does-not-do) records the decision on
-each: the void-lookup setting is declined by design, and the other two are
-planned.
+This row could be covered by the library, but only by adding public API. The
+README's [What it does not do](README.md#what-it-does-not-do) records the
+decision. The SMTP reply ([#10](https://github.com/rest-mail/go-spf/issues/10))
+and Received-SPF ([#11](https://github.com/rest-mail/go-spf/issues/11))
+proposals that were listed here are built.
 
 | Proposal | Rows it would cover | Notes |
 |----------|---------------------|-------|
 | An `Options` field for the void-lookup limit, defaulting to two. | SPF-LIMIT-09 | Declined by design. The row would then need a test that zero means two. A fixed limit already meets the RFC. |
-| A method on `Result` giving the SMTP reply code and enhanced status code §8 recommends (550 5.7.1, 451 4.4.3, 550 5.5.2). | SPF-RESULT-03, SPF-RESULT-06, SPF-RESULT-07 | Planned: [#10](https://github.com/rest-mail/go-spf/issues/10). The MTA would still choose whether to reject; the method only names the reply. |
-| A builder for the Received-SPF field value (result, comment, client-ip, helo, envelope-from, identity, receiver, mechanism keys), from a Response and the check's inputs. | SPF-HDR-01, SPF-HDR-03, SPF-RESULT-04 | Planned: [#11](https://github.com/rest-mail/go-spf/issues/11). Inputs would have to be checked against the §9.1 key-value grammar. Prepending the field (SPF-HDR-02) stays the MTA's job. |
